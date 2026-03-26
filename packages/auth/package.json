@@ -1,0 +1,24 @@
+{
+  "name": "@benstack-aws/auth",
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    },
+    "./*": {
+      "default": "./src/*.ts"
+    }
+  },
+  "scripts": {},
+  "dependencies": {
+    "@benstack-aws/db": "workspace:*",
+    "@benstack-aws/env": "workspace:*",
+    "better-auth": "catalog:",
+    "dotenv": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@benstack-aws/config": "workspace:*",
+    "typescript": "^5"
+  }
+}
