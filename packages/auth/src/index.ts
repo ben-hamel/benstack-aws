@@ -14,6 +14,19 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
   },
+  databaseHooks: {
+    user: {
+      create: {
+        before: async (user) => {
+          const allowed = env.ALLOWED_EMAILS.split(",").map((e) => e.trim().toLowerCase());
+          if (!allowed.includes(user.email.toLowerCase())) {
+            return false;
+          }
+          return { data: user };
+        },
+      },
+    },
+  },
   secret: env.BETTER_AUTH_SECRET,
   baseURL: env.BETTER_AUTH_URL,
   advanced: {
