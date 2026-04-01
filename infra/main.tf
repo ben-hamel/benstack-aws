@@ -77,6 +77,26 @@ resource "aws_iam_role_policy" "github_actions" {
         Effect   = "Allow"
         Action   = "iam:PassRole"
         Resource = aws_iam_role.ecs_execution.arn
+      },
+      {
+        Sid    = "S3Frontend"
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+          "s3:DeleteObject",
+          "s3:GetObject",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          aws_s3_bucket.frontend.arn,
+          "${aws_s3_bucket.frontend.arn}/*"
+        ]
+      },
+      {
+        Sid      = "CloudFrontInvalidate"
+        Effect   = "Allow"
+        Action   = "cloudfront:CreateInvalidation"
+        Resource = aws_cloudfront_distribution.frontend.arn
       }
     ]
   })
@@ -239,6 +259,10 @@ resource "aws_ecs_service" "api" {
   }
 
   depends_on = [aws_lb_listener.https]
+
+  lifecycle {
+    ignore_changes = [task_definition]
+  }
 }
 
 # ── ALB ───────────────────────────────────────────────────────────────────────
