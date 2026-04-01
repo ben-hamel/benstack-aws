@@ -28,6 +28,8 @@ jobs:
 
       - name: Build
         run: bunx turbo build --filter=web
+        env:
+          VITE_SERVER_URL: ${{ vars.VITE_SERVER_URL }}
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
