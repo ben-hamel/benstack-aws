@@ -1,0 +1,54 @@
+name: Deploy API
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/server/**"
+      - "packages/**"
+      - ".github/workflows/deploy-api.yml"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::989459974685:role/benstack-github-actions
+          aws-region: us-east-1
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        run: |
+          IMAGE_URI=989459974685.dkr.ecr.us-east-1.amazonaws.com/benstack-api:${{ github.sha }}
+          docker buildx build \
+            --platform linux/amd64 \
+            -f apps/server/Dockerfile \
+            -t $IMAGE_URI \
+            --push .
+
+      - name: Update ECS task definition with new image
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition-arn: arn:aws:ecs:us-east-1:989459974685:task-definition/benstack-api
+          container-name: api
+          image: 989459974685.dkr.ecr.us-east-1.amazonaws.com/benstack-api:${{ github.sha }}
+
+      - name: Deploy to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service: benstack-api
+          cluster: benstack
+          wait-for-service-stability: true
