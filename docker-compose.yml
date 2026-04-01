@@ -1,0 +1,40 @@
+name: benstack-aws
+
+services:
+  postgres:
+    image: postgres
+    container_name: benstack-aws-postgres
+    environment:
+      POSTGRES_DB: benstack-aws
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - benstack-aws_benstack-aws_postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  server:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://postgres:password@postgres:5432/benstack-aws
+      BETTER_AUTH_SECRET: PquFyc8ObUvK8QU8WNNiQa5qpF1W0VDz
+      BETTER_AUTH_URL: http://localhost:3000
+      CORS_ORIGIN: http://localhost:3001
+      ALLOWED_EMAILS: benehamel@gmail.com
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  benstack-aws_benstack-aws_postgres_data:
+    external: true
