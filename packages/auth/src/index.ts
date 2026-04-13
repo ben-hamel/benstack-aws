@@ -3,6 +3,7 @@ import * as schema from "@benstack-aws/db/schema/auth";
 import { env } from "@benstack-aws/env/server";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { admin, organization } from "better-auth/plugins";
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
@@ -36,5 +37,5 @@ export const auth = betterAuth({
       httpOnly: true,
     },
   },
-  plugins: [],
+  plugins: [organization(), admin()],
 });
