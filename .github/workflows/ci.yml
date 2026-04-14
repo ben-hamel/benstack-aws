@@ -23,6 +23,6 @@ jobs:
 
       - name: Verify database connectivity
         run: |
-          bun -e "import { Pool } from 'pg'; const p = new Pool({ connectionString: process.env.DATABASE_URL }); await p.query('SELECT 1'); await p.end(); console.log('DB connection OK');"
+          cd packages/db && bun -e "import { Pool } from 'pg'; const p = new Pool({ connectionString: process.env.DATABASE_URL }); await p.query('SELECT 1'); await p.end(); console.log('DB connection OK');"
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL_PRODUCTION }}
