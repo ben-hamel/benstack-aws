@@ -40,6 +40,8 @@
   "dependencies": {
     "@benstack-aws/env": "workspace:*",
     "dotenv": "catalog:",
+    "drizzle-kit": "^0.31.10",
+    "drizzle-orm": "^0.45.2",
     "zod": "catalog:"
   },
   "devDependencies": {
