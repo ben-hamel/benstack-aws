@@ -15,7 +15,7 @@ export const Route = createFileRoute("/dashboard")({
     return { session };
   },
   loader: async () => {
-    const res = await fetch(`${env.VITE_SERVER_URL}/receipts`, {
+    const res = await fetch(`${env.VITE_SERVER_URL}/api/receipts`, {
       credentials: "include",
     });
     if (!res.ok) return { receipts: [] };
@@ -50,7 +50,7 @@ function RouteComponent() {
     setUploading(true);
     try {
       // 1. Get presigned URL + jobId
-      const presignRes = await fetch(`${env.VITE_SERVER_URL}/receipts/presign`, {
+      const presignRes = await fetch(`${env.VITE_SERVER_URL}/api/receipts/presign`, {
         method: "POST",
         credentials: "include",
       });
