@@ -68,8 +68,17 @@ resource "aws_iam_role_policy" "github_actions" {
           "ecs:DescribeTaskDefinition",
           "ecs:RegisterTaskDefinition",
           "ecs:UpdateService",
-          "ecs:DescribeServices"
+          "ecs:DescribeServices",
+          "ecs:RunTask",
+          "ecs:DescribeTasks",
+          "ecs:StopTask"
         ]
+        Resource = "*"
+      },
+      {
+        Sid    = "EC2Describe"
+        Effect = "Allow"
+        Action = ["ec2:DescribeSecurityGroups"]
         Resource = "*"
       },
       {
@@ -466,6 +475,42 @@ resource "aws_cloudfront_distribution" "frontend" {
     ssl_support_method       = "sni-only"
     minimum_protocol_version = "TLSv1.2_2021"
   }
+}
+
+# ── DB Migrations ─────────────────────────────────────────────────────────────
+
+resource "aws_cloudwatch_log_group" "migrate" {
+  name              = "/ecs/benstack-migrate"
+  retention_in_days = 7
+}
+
+resource "aws_ecs_task_definition" "migrate" {
+  family                   = "benstack-migrate"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = 256
+  memory                   = 512
+  execution_role_arn       = aws_iam_role.ecs_execution.arn
+
+  container_definitions = jsonencode([{
+    name      = "migrate"
+    image     = "${aws_ecr_repository.api.repository_url}:migrate-latest"
+    essential = true
+
+    secrets = [{
+      name      = "DATABASE_URL"
+      valueFrom = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/benstack/database-url"
+    }]
+
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        awslogs-group         = aws_cloudwatch_log_group.migrate.name
+        awslogs-region        = var.aws_region
+        awslogs-stream-prefix = "ecs"
+      }
+    }
+  }])
 }
 
 # ── RDS ───────────────────────────────────────────────────────────────────────
