@@ -18,8 +18,8 @@
         "typescript": "^5",
       },
     },
-    "apps/lambda": {
-      "name": "@benstack-aws/lambda",
+    "apps/receipt-processor": {
+      "name": "@benstack-aws/receipt-processor",
       "dependencies": {
         "@aws-sdk/client-s3": "^3.821.0",
         "@benstack-aws/db": "workspace:*",
@@ -336,7 +336,7 @@
 
     "@benstack-aws/env": ["@benstack-aws/env@workspace:packages/env"],
 
-    "@benstack-aws/lambda": ["@benstack-aws/lambda@workspace:apps/lambda"],
+    "@benstack-aws/receipt-processor": ["@benstack-aws/receipt-processor@workspace:apps/receipt-processor"],
 
     "@benstack-aws/ui": ["@benstack-aws/ui@workspace:packages/ui"],
 
