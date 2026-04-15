@@ -3,11 +3,19 @@ import * as schema from "@benstack-aws/db/schema/auth";
 import { env } from "@benstack-aws/env/server";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { admin, organization } from "better-auth/plugins";
+import { eq } from "drizzle-orm";
+
+function toSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
     provider: "pg",
-
     schema: schema,
   }),
   trustedOrigins: [env.CORS_ORIGIN],
@@ -15,6 +23,24 @@ export const auth = betterAuth({
     enabled: true,
   },
   databaseHooks: {
+    session: {
+      create: {
+        before: async (session) => {
+          const [membership] = await db
+            .select({ organizationId: schema.member.organizationId })
+            .from(schema.member)
+            .where(eq(schema.member.userId, session.userId))
+            .limit(1);
+
+          return {
+            data: {
+              ...session,
+              activeOrganizationId: membership?.organizationId ?? null,
+            },
+          };
+        },
+      },
+    },
     user: {
       create: {
         before: async (user) => {
@@ -23,6 +49,25 @@ export const auth = betterAuth({
             return false;
           }
           return { data: user };
+        },
+        after: async (user) => {
+          const slug = `${toSlug(user.name)}-${crypto.randomUUID().slice(0, 8)}`;
+          const orgId = crypto.randomUUID();
+
+          await db.insert(schema.organization).values({
+            id: orgId,
+            name: `${user.name}'s org`,
+            slug,
+            createdAt: new Date(),
+          });
+
+          await db.insert(schema.member).values({
+            id: crypto.randomUUID(),
+            organizationId: orgId,
+            userId: user.id,
+            role: "owner",
+            createdAt: new Date(),
+          });
         },
       },
     },
@@ -36,5 +81,5 @@ export const auth = betterAuth({
       httpOnly: true,
     },
   },
-  plugins: [],
+  plugins: [organization(), admin()],
 });
