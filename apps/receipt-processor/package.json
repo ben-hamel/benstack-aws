@@ -2,7 +2,7 @@
   "name": "@benstack-aws/receipt-processor",
   "type": "module",
   "scripts": {
-    "build": "bun build src/index.ts --outfile dist/index.js --target node --bundle"
+    "build": "bun build src/index.ts --outfile dist/index.js --target node --bundle --format cjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.821.0",
