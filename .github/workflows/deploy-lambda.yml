@@ -1,11 +1,13 @@
 name: Deploy Lambda
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
       - "apps/receipt-processor/**"
       - "packages/db/**"
+      - "bun.lock"
       - ".github/workflows/deploy-lambda.yml"
 
 permissions:
