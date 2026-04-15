@@ -552,6 +552,42 @@ resource "aws_ecs_task_definition" "migrate" {
   }])
 }
 
+# ── Seed ──────────────────────────────────────────────────────────────────────
+
+resource "aws_cloudwatch_log_group" "seed" {
+  name              = "/ecs/benstack-seed"
+  retention_in_days = 7
+}
+
+resource "aws_ecs_task_definition" "seed" {
+  family                   = "benstack-seed"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = 256
+  memory                   = 512
+  execution_role_arn       = aws_iam_role.ecs_execution.arn
+
+  container_definitions = jsonencode([{
+    name      = "seed"
+    image     = "${aws_ecr_repository.api.repository_url}:seed-latest"
+    essential = true
+
+    secrets = [{
+      name      = "DATABASE_URL"
+      valueFrom = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/benstack/database-url"
+    }]
+
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        awslogs-group         = aws_cloudwatch_log_group.seed.name
+        awslogs-region        = var.aws_region
+        awslogs-stream-prefix = "ecs"
+      }
+    }
+  }])
+}
+
 # ── RDS ───────────────────────────────────────────────────────────────────────
 
 resource "aws_db_instance" "benstack" {
