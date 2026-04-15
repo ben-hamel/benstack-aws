@@ -1,7 +1,7 @@
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { db, desc, eq } from "@benstack-aws/db";
-import { env } from "@benstack-aws/env/server";
+import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import type { SQSEvent } from "aws-lambda";
+import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
+import { eq } from "drizzle-orm";
 import {
   receiptItems,
   receiptJobs,
@@ -10,46 +10,15 @@ import {
   receipts,
 } from "@benstack-aws/db/schema/receipts";
 
-const s3 = new S3Client({ region: process.env.AWS_REGION ?? "us-east-1" });
+// ── DB connection ────────────────────────────────────────────────────────────
 
-export async function createJob(organizationId: string, uploadedBy: string) {
-  const [job] = await db
-    .insert(receiptJobs)
-    .values({ organizationId, uploadedBy, s3Key: "" })
-    .returning({ id: receiptJobs.id });
+const db: NodePgDatabase = drizzle(process.env.DATABASE_URL!);
 
-  if (!job) throw new Error("Failed to create receipt job");
+// ── S3 client ────────────────────────────────────────────────────────────────
 
-  const s3Key = `uploads/${organizationId}/${job.id}/receipts.json`;
+const s3 = new S3Client({});
 
-  await db
-    .update(receiptJobs)
-    .set({ s3Key })
-    .where(eq(receiptJobs.id, job.id));
-
-  const uploadUrl = await getSignedUrl(
-    s3,
-    new PutObjectCommand({
-      Bucket: env.S3_RECEIPTS_BUCKET,
-      Key: s3Key,
-      ContentType: "application/json",
-    }),
-    { expiresIn: 300 },
-  );
-
-  return { jobId: job.id, uploadUrl };
-}
-
-export async function getJob(jobId: string, organizationId: string) {
-  const [job] = await db
-    .select()
-    .from(receiptJobs)
-    .where(eq(receiptJobs.id, jobId))
-    .limit(1);
-
-  if (!job || job.organizationId !== organizationId) return null;
-  return job;
-}
+// ── Costco receipt types ─────────────────────────────────────────────────────
 
 interface CostcoItem {
   itemActualName: string;
@@ -106,6 +75,8 @@ interface CostcoReceipt {
   subTaxes: CostcoSubTaxes | null;
 }
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
 function classifyItem(item: CostcoItem): string {
   const desc = item.itemDescription01 || item.itemActualName;
   if (item.fuelGradeCode) return "fuel";
@@ -124,7 +95,9 @@ function mapReceiptType(receiptType: string): "warehouse" | "gas_station" {
   return receiptType === "Gas Station" ? "gas_station" : "warehouse";
 }
 
-export async function insertReceipts(
+// ── Insert logic ─────────────────────────────────────────────────────────────
+
+async function insertReceipts(
   data: CostcoReceipt[],
   organizationId: string,
   uploadedBy: string,
@@ -261,28 +234,86 @@ export async function insertReceipts(
   return { imported, total: data.length, skipped };
 }
 
-export async function getReceipts(organizationId: string) {
-  return db
-    .select()
-    .from(receipts)
-    .where(eq(receipts.organizationId, organizationId))
-    .orderBy(desc(receipts.transactionDate));
-}
+// ── Lambda handler ───────────────────────────────────────────────────────────
 
-export async function getReceiptDetail(receiptId: string, organizationId: string) {
-  const [receipt] = await db
-    .select()
-    .from(receipts)
-    .where(eq(receipts.id, receiptId))
-    .limit(1);
+export const handler = async (event: SQSEvent) => {
+  for (const record of event.Records) {
+    const body = JSON.parse(record.body) as {
+      Records: Array<{ s3: { bucket: { name: string }; object: { key: string } } }>;
+    };
 
-  if (!receipt || receipt.organizationId !== organizationId) return null;
+    for (const s3Record of body.Records) {
+      const bucket = s3Record.s3.bucket.name;
+      // S3 URL-encodes the key — decode it before use
+      const key = decodeURIComponent(s3Record.s3.object.key.replace(/\+/g, " "));
 
-  const [items, tenders, taxes] = await Promise.all([
-    db.select().from(receiptItems).where(eq(receiptItems.receiptId, receiptId)),
-    db.select().from(receiptTenders).where(eq(receiptTenders.receiptId, receiptId)),
-    db.select().from(receiptTaxes).where(eq(receiptTaxes.receiptId, receiptId)),
-  ]);
+      // Key format: uploads/{orgId}/{jobId}/receipts.json
+      const [, orgId, jobId] = key.split("/");
 
-  return { ...receipt, items, tenders, taxes };
-}
+      if (!orgId || !jobId) {
+        console.error(`Unexpected S3 key format: ${key}`);
+        continue;
+      }
+
+      try {
+        // Mark job as processing
+        await db
+          .update(receiptJobs)
+          .set({ status: "processing", updatedAt: new Date() })
+          .where(eq(receiptJobs.id, jobId));
+
+        // Fetch job to get uploadedBy
+        const [job] = await db
+          .select()
+          .from(receiptJobs)
+          .where(eq(receiptJobs.id, jobId))
+          .limit(1);
+
+        if (!job) throw new Error(`Job ${jobId} not found`);
+
+        // Download file from S3
+        const response = await s3.send(
+          new GetObjectCommand({ Bucket: bucket, Key: key }),
+        );
+        const text = await response.Body!.transformToString();
+        const parsed = JSON.parse(text) as unknown;
+        const data: CostcoReceipt[] = Array.isArray(parsed)
+          ? parsed
+          : (parsed as { receipts: CostcoReceipt[] }).receipts;
+
+        // Process receipts
+        const result = await insertReceipts(data, orgId, job.uploadedBy);
+
+        // Mark job done
+        await db
+          .update(receiptJobs)
+          .set({
+            status: "done",
+            imported: result.imported,
+            skipped: result.skipped,
+            total: result.total,
+            updatedAt: new Date(),
+          })
+          .where(eq(receiptJobs.id, jobId));
+
+        console.log(
+          `Job ${jobId} complete — imported: ${result.imported}, skipped: ${result.skipped}`,
+        );
+      } catch (error) {
+        console.error(`Job ${jobId} failed:`, error);
+
+        await db
+          .update(receiptJobs)
+          .set({
+            status: "failed",
+            errorMessage: String(error),
+            updatedAt: new Date(),
+          })
+          .where(eq(receiptJobs.id, jobId));
+
+        // Re-throw so SQS retries this message
+        throw error;
+      }
+    }
+  }
+};

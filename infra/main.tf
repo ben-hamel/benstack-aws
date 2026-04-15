@@ -241,6 +241,10 @@ resource "aws_ecs_task_definition" "api" {
       {
         name      = "ALLOWED_EMAILS"
         valueFrom = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/benstack/allowed-emails"
+      },
+      {
+        name      = "S3_RECEIPTS_BUCKET"
+        valueFrom = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/benstack/s3-receipts-bucket"
       }
     ]
 
@@ -586,6 +590,238 @@ resource "aws_ecs_task_definition" "seed" {
       }
     }
   }])
+}
+
+# ── S3 Receipts Bucket ────────────────────────────────────────────────────────
+
+resource "aws_s3_bucket" "receipts" {
+  bucket = "benstack-receipts"
+}
+
+resource "aws_s3_bucket_public_access_block" "receipts" {
+  bucket = aws_s3_bucket.receipts.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_cors_configuration" "receipts" {
+  bucket = aws_s3_bucket.receipts.id
+
+  cors_rule {
+    allowed_headers = ["*"]
+    allowed_methods = ["PUT"]
+    allowed_origins = ["https://costco-expense-tracker.aws.eastcoastdev.online"]
+    expose_headers  = ["ETag"]
+    max_age_seconds = 3000
+  }
+}
+
+# ── SQS ───────────────────────────────────────────────────────────────────────
+
+resource "aws_sqs_queue" "receipt_processing_dlq" {
+  name                      = "benstack-receipt-processing-dlq"
+  message_retention_seconds = 1209600 # 14 days
+}
+
+resource "aws_sqs_queue" "receipt_processing" {
+  name = "benstack-receipt-processing"
+
+  # Must be >= Lambda timeout so a slow execution doesn't cause duplicate processing
+  visibility_timeout_seconds = 300
+
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.receipt_processing_dlq.arn
+    maxReceiveCount     = 3
+  })
+}
+
+# Allow S3 to send messages to the queue
+resource "aws_sqs_queue_policy" "receipt_processing" {
+  queue_url = aws_sqs_queue.receipt_processing.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "s3.amazonaws.com" }
+      Action    = "sqs:SendMessage"
+      Resource  = aws_sqs_queue.receipt_processing.arn
+      Condition = {
+        ArnEquals = {
+          "aws:SourceArn" = aws_s3_bucket.receipts.arn
+        }
+      }
+    }]
+  })
+}
+
+# Wire S3 to fire a notification into SQS on every upload
+resource "aws_s3_bucket_notification" "receipts" {
+  bucket = aws_s3_bucket.receipts.id
+
+  queue {
+    queue_arn     = aws_sqs_queue.receipt_processing.arn
+    events        = ["s3:ObjectCreated:*"]
+    filter_prefix = "uploads/"
+  }
+
+  depends_on = [aws_sqs_queue_policy.receipt_processing]
+}
+
+# ── Lambda ────────────────────────────────────────────────────────────────────
+
+# Read DATABASE_URL from SSM to pass as Lambda env var
+data "aws_ssm_parameter" "database_url" {
+  name            = "/benstack/database-url"
+  with_decryption = true
+}
+
+# Build the zip from the pre-bundled JS file (run `bun run build:lambda` first)
+data "archive_file" "lambda_receipt_processor" {
+  type        = "zip"
+  source_file = "${path.module}/../apps/lambda/dist/index.js"
+  output_path = "${path.module}/../apps/lambda/dist/function.zip"
+}
+
+resource "aws_cloudwatch_log_group" "lambda_receipt_processor" {
+  name              = "/aws/lambda/benstack-receipt-processor"
+  retention_in_days = 7
+}
+
+resource "aws_iam_role" "lambda_receipt_processor" {
+  name = "benstack-lambda-receipt-processor"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+# Allows Lambda to create/manage ENIs so it can join the VPC
+resource "aws_iam_role_policy_attachment" "lambda_vpc_access" {
+  role       = aws_iam_role.lambda_receipt_processor.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+resource "aws_iam_role_policy" "lambda_receipt_processor" {
+  name = "benstack-lambda-receipt-processor"
+  role = aws_iam_role.lambda_receipt_processor.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "S3ReadReceipts"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject"]
+        Resource = "${aws_s3_bucket.receipts.arn}/uploads/*"
+      },
+      {
+        Sid    = "SQSConsume"
+        Effect = "Allow"
+        Action = [
+          "sqs:ReceiveMessage",
+          "sqs:DeleteMessage",
+          "sqs:GetQueueAttributes"
+        ]
+        Resource = aws_sqs_queue.receipt_processing.arn
+      },
+      {
+        Sid    = "CloudWatchLogs"
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "${aws_cloudwatch_log_group.lambda_receipt_processor.arn}:*"
+      }
+    ]
+  })
+}
+
+resource "aws_security_group" "lambda_receipt_processor" {
+  name        = "benstack-lambda-receipt-processor"
+  description = "Lambda receipt processor - egress to RDS only"
+  vpc_id      = data.aws_subnet.primary.vpc_id
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+# Allow Lambda to reach RDS (mirrors the existing ecs_to_rds rule)
+resource "aws_security_group_rule" "lambda_to_rds" {
+  type                     = "ingress"
+  from_port                = 5432
+  to_port                  = 5432
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.lambda_receipt_processor.id
+  security_group_id        = "sg-01a1dc99f13280bda"
+}
+
+resource "aws_lambda_function" "receipt_processor" {
+  filename         = data.archive_file.lambda_receipt_processor.output_path
+  source_code_hash = data.archive_file.lambda_receipt_processor.output_base64sha256
+  function_name    = "benstack-receipt-processor"
+  role             = aws_iam_role.lambda_receipt_processor.arn
+  handler          = "index.handler"
+  runtime          = "nodejs20.x"
+  timeout          = 300
+  memory_size      = 512
+
+  vpc_config {
+    subnet_ids         = ["subnet-0ca001675e47fd157", "subnet-083bc2d76e68d266d"]
+    security_group_ids = [aws_security_group.lambda_receipt_processor.id]
+  }
+
+  environment {
+    variables = {
+      DATABASE_URL = data.aws_ssm_parameter.database_url.value
+    }
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.lambda_vpc_access,
+    aws_cloudwatch_log_group.lambda_receipt_processor,
+  ]
+}
+
+# Wire SQS → Lambda (batch_size=1 so each upload is one Lambda invocation)
+resource "aws_lambda_event_source_mapping" "receipt_sqs" {
+  event_source_arn = aws_sqs_queue.receipt_processing.arn
+  function_name    = aws_lambda_function.receipt_processor.arn
+  batch_size       = 1
+}
+
+# ── S3 Gateway VPC Endpoint (free — lets Lambda reach S3 without internet) ───
+
+data "aws_route_tables" "vpc" {
+  vpc_id = data.aws_subnet.primary.vpc_id
+}
+
+resource "aws_vpc_endpoint" "s3" {
+  vpc_id       = data.aws_subnet.primary.vpc_id
+  service_name = "com.amazonaws.${var.aws_region}.s3"
+
+  route_table_ids = data.aws_route_tables.vpc.ids
+}
+
+# ── SSM — S3 bucket name for ECS task ────────────────────────────────────────
+
+resource "aws_ssm_parameter" "s3_receipts_bucket" {
+  name  = "/benstack/s3-receipts-bucket"
+  type  = "String"
+  value = aws_s3_bucket.receipts.id
 }
 
 # ── RDS ───────────────────────────────────────────────────────────────────────

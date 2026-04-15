@@ -1,0 +1,7 @@
+{
+  "extends": "@benstack-aws/config/tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "outDir": "dist"
+  }
+}

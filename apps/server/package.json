@@ -10,6 +10,8 @@
     "start": "bun run dist/index.mjs"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1030.0",
+    "@aws-sdk/s3-request-presigner": "^3.1030.0",
     "@benstack-aws/auth": "workspace:*",
     "@benstack-aws/db": "workspace:*",
     "@benstack-aws/env": "workspace:*",

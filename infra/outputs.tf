@@ -32,3 +32,18 @@ output "frontend_acm_validation_records" {
   description = "DNS records to add in Cloudflare to validate the frontend ACM certificate."
   value       = aws_acm_certificate.frontend.domain_validation_options
 }
+
+output "receipts_bucket" {
+  description = "S3 bucket for receipt uploads."
+  value       = aws_s3_bucket.receipts.id
+}
+
+output "receipt_processing_queue_url" {
+  description = "SQS queue URL for receipt processing."
+  value       = aws_sqs_queue.receipt_processing.id
+}
+
+output "receipt_processing_dlq_url" {
+  description = "Dead-letter queue URL — failed messages land here after 3 retries."
+  value       = aws_sqs_queue.receipt_processing_dlq.id
+}

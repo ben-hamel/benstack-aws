@@ -10,6 +10,7 @@ export const env = createEnv({
     CORS_ORIGIN: z.url(),
     ALLOWED_EMAILS: z.string().min(1),
     NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+    S3_RECEIPTS_BUCKET: z.string().min(1),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,

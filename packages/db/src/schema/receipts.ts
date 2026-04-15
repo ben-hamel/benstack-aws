@@ -123,3 +123,30 @@ export const receiptTaxes = pgTable(
   },
   (table) => [index("receipt_tax_receipt_id_idx").on(table.receiptId)],
 );
+
+export const receiptJobStatusEnum = pgEnum("receipt_job_status", [
+  "pending",
+  "processing",
+  "done",
+  "failed",
+]);
+
+export const receiptJobs = pgTable(
+  "receipt_job",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    uploadedBy: text("uploaded_by").notNull(),
+    status: receiptJobStatusEnum("status").notNull().default("pending"),
+    s3Key: text("s3_key").notNull(),
+    imported: integer("imported"),
+    skipped: integer("skipped"),
+    total: integer("total"),
+    errorMessage: text("error_message"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [index("receipt_job_org_id_idx").on(table.organizationId)],
+);

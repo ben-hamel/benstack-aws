@@ -1,6 +1,12 @@
 import { auth } from "@benstack-aws/auth";
 import { Hono } from "hono";
-import { getReceiptDetail, getReceipts, insertReceipts } from "./receipts.service";
+import {
+  createJob,
+  getJob,
+  getReceiptDetail,
+  getReceipts,
+  insertReceipts,
+} from "./receipts.service";
 
 type Variables = {
   userId: string;
@@ -24,6 +30,33 @@ app.use("*", async (c, next) => {
   c.set("userId", session.user.id);
   c.set("orgId", orgId);
   await next();
+});
+
+app.post("/presign", async (c) => {
+  const userId = c.get("userId");
+  const orgId = c.get("orgId");
+
+  try {
+    const result = await createJob(orgId, userId);
+    return c.json(result);
+  } catch (error) {
+    console.error("Failed to create upload job:", error);
+    return c.json({ error: "Failed to create upload job" }, { status: 500 });
+  }
+});
+
+app.get("/jobs/:id", async (c) => {
+  const orgId = c.get("orgId");
+  const jobId = c.req.param("id");
+
+  try {
+    const job = await getJob(jobId, orgId);
+    if (!job) return c.json({ error: "Job not found" }, { status: 404 });
+    return c.json(job);
+  } catch (error) {
+    console.error("Failed to fetch job:", error);
+    return c.json({ error: "Failed to fetch job" }, { status: 500 });
+  }
 });
 
 app.post("/upload", async (c) => {
