@@ -10,7 +10,10 @@ import {
   receipts,
 } from "@benstack-aws/db/schema/receipts";
 
-const s3 = new S3Client({ region: process.env.AWS_REGION ?? "us-east-1" });
+const s3 = new S3Client({
+  region: process.env.AWS_REGION ?? "us-east-1",
+  requestChecksumCalculation: "WHEN_REQUIRED",
+});
 
 export async function createJob(organizationId: string, uploadedBy: string) {
   const [job] = await db
