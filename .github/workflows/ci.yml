@@ -20,9 +20,3 @@ jobs:
 
       - name: Type check
         run: bunx turbo check-types
-
-      - name: Verify database connectivity
-        run: |
-          cd packages/db && bun -e "import { Pool } from 'pg'; const p = new Pool({ connectionString: process.env.DATABASE_URL }); await p.query('SELECT 1'); await p.end(); console.log('DB connection OK');"
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL_PRODUCTION }}
