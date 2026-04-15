@@ -1,5 +1,5 @@
 import { env } from "@benstack-aws/env/web";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { ChevronDownIcon, ChevronUpIcon, FuelIcon, ReceiptTextIcon, UploadIcon } from "lucide-react";
 import { useRef, useState } from "react";
@@ -251,7 +251,6 @@ type UploadState =
   | { status: "error"; message: string };
 
 function RouteComponent() {
-  const queryClient = useQueryClient();
   const { data: receipts = [], isLoading } = useQuery(receiptsQueryOptions());
   const [openId, setOpenId] = useState<string | null>(null);
   const [uploadState, setUploadState] = useState<UploadState>({ status: "idle" });
@@ -268,30 +267,27 @@ function RouteComponent() {
 
     setUploadState({ status: "uploading" });
 
-    const formData = new FormData();
-    formData.append("file", file);
-
     try {
-      const res = await fetch(`${SERVER_URL}/api/receipts/upload`, {
+      const presignRes = await fetch(`${SERVER_URL}/api/receipts/presign`, {
         method: "POST",
         credentials: "include",
-        body: formData,
       });
+      if (!presignRes.ok) throw new Error("Failed to create upload job");
+      const { uploadUrl } = (await presignRes.json()) as { jobId: string; uploadUrl: string };
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        setUploadState({ status: "error", message: data.error ?? "Upload failed." });
-        return;
-      }
+      const putRes = await fetch(uploadUrl, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!putRes.ok) throw new Error("Failed to upload file to S3");
 
       setUploadState({
         status: "success",
-        message: `Imported ${data.imported} of ${data.total} receipts${data.skipped ? ` (${data.skipped} skipped)` : ""}.`,
+        message: "Upload submitted — refresh in a moment to see your receipts.",
       });
-      void queryClient.invalidateQueries({ queryKey: ["receipts"] });
-    } catch {
-      setUploadState({ status: "error", message: "Network error during upload." });
+    } catch (err) {
+      setUploadState({ status: "error", message: err instanceof Error ? err.message : "Upload failed." });
     }
 
     if (inputRef.current) inputRef.current.value = "";
