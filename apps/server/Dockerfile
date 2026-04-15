@@ -1,4 +1,6 @@
-FROM oven/bun:1 AS builder
+ARG BUN_VERSION=1.3.9
+
+FROM oven/bun:${BUN_VERSION} AS builder
 WORKDIR /app
 
 # Copy root manifests
@@ -6,13 +8,15 @@ COPY package.json bun.lock ./
 
 # Copy workspace package manifests
 COPY apps/server/package.json ./apps/server/
+COPY apps/web/package.json ./apps/web/
 COPY packages/auth/package.json ./packages/auth/
 COPY packages/config/package.json ./packages/config/
 COPY packages/db/package.json ./packages/db/
 COPY packages/env/package.json ./packages/env/
+COPY packages/ui/package.json ./packages/ui/
 
 # Install all dependencies
-RUN bun install
+RUN bun install --frozen-lockfile
 
 # Copy source
 COPY tsconfig.json ./
@@ -27,13 +31,17 @@ COPY packages/env/src ./packages/env/src
 RUN cd apps/server && bun run build
 
 # ── Migrate ───────────────────────────────────────────────────────────────────
-FROM oven/bun:1 AS migrate
+FROM oven/bun:${BUN_VERSION} AS migrate
 WORKDIR /app
 
 COPY package.json bun.lock ./
+COPY apps/server/package.json ./apps/server/
+COPY apps/web/package.json ./apps/web/
+COPY packages/auth/package.json ./packages/auth/
+COPY packages/config/package.json ./packages/config/
 COPY packages/db/package.json ./packages/db/
 COPY packages/env/package.json ./packages/env/
-COPY packages/config/package.json ./packages/config/
+COPY packages/ui/package.json ./packages/ui/
 
 RUN bun install --frozen-lockfile
 
@@ -45,7 +53,7 @@ WORKDIR /app/packages/db
 CMD ["bun", "run", "db:push"]
 
 # ── Runner ────────────────────────────────────────────────────────────────────
-FROM oven/bun:1-slim AS runner
+FROM oven/bun:${BUN_VERSION}-slim AS runner
 WORKDIR /app
 
 COPY --from=builder /app/apps/server/dist ./
