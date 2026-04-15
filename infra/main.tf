@@ -154,6 +154,40 @@ resource "aws_iam_role_policy" "ecs_execution_ssm" {
   })
 }
 
+# ── ECS Task Role (for ECS Exec) ─────────────────────────────────────────────
+
+resource "aws_iam_role" "ecs_task" {
+  name = "benstack-ecs-task"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "ecs-tasks.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "ecs_task_exec_command" {
+  name = "benstack-ecs-exec-command"
+  role = aws_iam_role.ecs_task.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "ssmmessages:CreateControlChannel",
+        "ssmmessages:CreateDataChannel",
+        "ssmmessages:OpenControlChannel",
+        "ssmmessages:OpenDataChannel"
+      ]
+      Resource = "*"
+    }]
+  })
+}
+
 # ── ECS ───────────────────────────────────────────────────────────────────────
 
 resource "aws_cloudwatch_log_group" "api" {
@@ -172,6 +206,7 @@ resource "aws_ecs_task_definition" "api" {
   cpu                      = 256
   memory                   = 512
   execution_role_arn       = aws_iam_role.ecs_execution.arn
+  task_role_arn            = aws_iam_role.ecs_task.arn
 
   container_definitions = jsonencode([{
     name      = "api"
@@ -249,11 +284,12 @@ resource "aws_security_group_rule" "ecs_to_rds" {
 }
 
 resource "aws_ecs_service" "api" {
-  name            = "benstack-api"
-  cluster         = aws_ecs_cluster.benstack.id
-  task_definition = aws_ecs_task_definition.api.arn
-  desired_count   = 1
-  launch_type     = "FARGATE"
+  name                   = "benstack-api"
+  cluster                = aws_ecs_cluster.benstack.id
+  task_definition        = aws_ecs_task_definition.api.arn
+  desired_count          = 1
+  launch_type            = "FARGATE"
+  enable_execute_command = true
 
   network_configuration {
     subnets          = ["subnet-0ca001675e47fd157", "subnet-083bc2d76e68d266d"]
@@ -268,10 +304,6 @@ resource "aws_ecs_service" "api" {
   }
 
   depends_on = [aws_lb_listener.https]
-
-  lifecycle {
-    ignore_changes = [task_definition]
-  }
 }
 
 # ── ALB ───────────────────────────────────────────────────────────────────────

@@ -33,6 +33,7 @@ CMD ["bun", "run", "db:push"]
 
 # ── Runner ────────────────────────────────────────────────────────────────────
 FROM oven/bun:${BUN_VERSION}-slim AS runner
+RUN apt-get update && apt-get install -y postgresql-client && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=builder /app/apps/server/dist ./
 EXPOSE 3000
