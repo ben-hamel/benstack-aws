@@ -82,10 +82,13 @@ resource "aws_iam_role_policy" "github_actions" {
         Resource = "*"
       },
       {
-        Sid      = "PassRole"
-        Effect   = "Allow"
-        Action   = "iam:PassRole"
-        Resource = aws_iam_role.ecs_execution.arn
+        Sid    = "PassRole"
+        Effect = "Allow"
+        Action = "iam:PassRole"
+        Resource = [
+          aws_iam_role.ecs_execution.arn,
+          aws_iam_role.ecs_task.arn
+        ]
       },
       {
         Sid    = "S3Frontend"
