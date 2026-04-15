@@ -304,6 +304,10 @@ resource "aws_ecs_service" "api" {
   }
 
   depends_on = [aws_lb_listener.https]
+
+  lifecycle {
+    ignore_changes = [task_definition]
+  }
 }
 
 # ── ALB ───────────────────────────────────────────────────────────────────────
