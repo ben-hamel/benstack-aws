@@ -54,7 +54,7 @@ jobs:
         id: register-migrate-task-def
         run: |
           TASK_DEF_ARN=$(aws ecs register-task-definition \
-            --cli-input-json file://${{ steps.migrate-task-def.outputs.task-definition }} \
+            --cli-input-json "$(jq 'del(.tags)' ${{ steps.migrate-task-def.outputs.task-definition }})" \
             --query 'taskDefinition.taskDefinitionArn' \
             --output text)
           echo "task-def-arn=$TASK_DEF_ARN" >> $GITHUB_OUTPUT
