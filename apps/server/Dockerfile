@@ -33,7 +33,7 @@ CMD ["bun", "run", "db:push"]
 
 # ── Runner ────────────────────────────────────────────────────────────────────
 FROM oven/bun:${BUN_VERSION}-slim AS runner
-# add this so we can access data from RDS, if we get differect soltion this can be removed.
+# add this so we can access data from RDS, if we get differect soltion this can be removed..
 RUN apt-get update && apt-get install -y postgresql-client && rm -rf /var/lib/apt/lists/* 
 WORKDIR /app
 COPY --from=builder /app/apps/server/dist ./
