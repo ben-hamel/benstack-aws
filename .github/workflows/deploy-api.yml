@@ -42,6 +42,23 @@ jobs:
             --cache-to type=gha,mode=max \
             --push .
 
+      - name: Update migrate task definition with new image
+        id: migrate-task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition-arn: arn:aws:ecs:${{ vars.AWS_REGION }}:${{ vars.AWS_ACCOUNT_ID }}:task-definition/benstack-migrate
+          container-name: migrate
+          image: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/benstack-api:migrate-${{ github.sha }}
+
+      - name: Register migrate task definition
+        id: register-migrate-task-def
+        run: |
+          TASK_DEF_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://${{ steps.migrate-task-def.outputs.task-definition }} \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+          echo "task-def-arn=$TASK_DEF_ARN" >> $GITHUB_OUTPUT
+
       - name: Run migrations on ECS
         run: |
           SG_ID=$(aws ec2 describe-security-groups \
@@ -51,10 +68,9 @@ jobs:
 
           TASK_ARN=$(aws ecs run-task \
             --cluster benstack \
-            --task-definition benstack-migrate \
+            --task-definition ${{ steps.register-migrate-task-def.outputs.task-def-arn }} \
             --launch-type FARGATE \
             --network-configuration "awsvpcConfiguration={subnets=[subnet-0ca001675e47fd157,subnet-083bc2d76e68d266d],securityGroups=[$SG_ID],assignPublicIp=ENABLED}" \
-            --overrides "{\"containerOverrides\":[{\"name\":\"migrate\",\"image\":\"${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/benstack-api:migrate-${{ github.sha }}\"}]}" \
             --query 'tasks[0].taskArn' \
             --output text)
 
