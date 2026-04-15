@@ -1,5 +1,5 @@
 {
-  "name": "@benstack-aws/lambda",
+  "name": "@benstack-aws/receipt-processor",
   "type": "module",
   "scripts": {
     "build": "bun build src/index.ts --outfile dist/index.js --target node --bundle"

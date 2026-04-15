@@ -692,8 +692,8 @@ data "aws_ssm_parameter" "database_url" {
 # Build the zip from the pre-bundled JS file (run `bun run build:lambda` first)
 data "archive_file" "lambda_receipt_processor" {
   type        = "zip"
-  source_file = "${path.module}/../apps/lambda/dist/index.js"
-  output_path = "${path.module}/../apps/lambda/dist/function.zip"
+  source_file = "${path.module}/../apps/receipt-processor/dist/index.js"
+  output_path = "${path.module}/../apps/receipt-processor/dist/function.zip"
 }
 
 resource "aws_cloudwatch_log_group" "lambda_receipt_processor" {

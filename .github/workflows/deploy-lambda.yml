@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "apps/lambda/**"
+      - "apps/receipt-processor/**"
       - "packages/db/**"
       - ".github/workflows/deploy-lambda.yml"
 
@@ -37,7 +37,7 @@ jobs:
 
       - name: Deploy Lambda to AWS
         run: |
-          cd apps/lambda/dist
+          cd apps/receipt-processor/dist
           zip function.zip index.js
 
           aws lambda update-function-code \
