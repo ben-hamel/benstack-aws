@@ -35,7 +35,8 @@
     "db:start": "turbo -F @benstack-aws/db db:start",
     "db:watch": "turbo -F @benstack-aws/db db:watch",
     "db:stop": "turbo -F @benstack-aws/db db:stop",
-    "db:down": "turbo -F @benstack-aws/db db:down"
+    "db:down": "turbo -F @benstack-aws/db db:down",
+    "db:prod": "./scripts/db-prod.sh"
   },
   "dependencies": {
     "@benstack-aws/env": "workspace:*",
