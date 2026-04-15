@@ -15,6 +15,17 @@ This project was created with [Better-T-Stack](https://github.com/AmanVarshney01
 - **Authentication** - Better-Auth
 - **Turborepo** - Optimized monorepo build system
 
+## Prerequisites
+
+- [Bun](https://bun.sh)
+- [AWS CLI](https://aws.amazon.com/cli/) — for deploying and accessing production resources
+- [AWS Session Manager Plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html) — required for production database access
+
+```bash
+brew install awscli
+brew install --cask session-manager-plugin
+```
+
 ## Getting Started
 
 First, install the dependencies:
@@ -95,3 +106,4 @@ benstack-aws/
 - `bun run db:generate`: Generate database client/types
 - `bun run db:migrate`: Run database migrations
 - `bun run db:studio`: Open database studio UI
+- `bun run db:prod`: Connect to the production RDS database via ECS Exec (requires AWS CLI + Session Manager plugin)
