@@ -91,64 +91,6 @@ jobs:
           echo "Exit code: $EXIT_CODE"
           [ "$EXIT_CODE" = "0" ] || exit 1
 
-      - name: Build and push seed image
-        run: |
-          docker buildx build \
-            --platform linux/amd64 \
-            -f apps/server/Dockerfile \
-            --target seed \
-            -t ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/benstack-api:seed-${{ github.sha }} \
-            -t ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/benstack-api:seed-latest \
-            --cache-from type=gha \
-            --cache-to type=gha,mode=max \
-            --push .
-
-      - name: Update seed task definition with new image
-        id: seed-task-def
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
-        with:
-          task-definition-arn: arn:aws:ecs:${{ vars.AWS_REGION }}:${{ vars.AWS_ACCOUNT_ID }}:task-definition/benstack-seed
-          container-name: seed
-          image: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/benstack-api:seed-${{ github.sha }}
-
-      - name: Register seed task definition
-        id: register-seed-task-def
-        run: |
-          TASK_DEF_ARN=$(aws ecs register-task-definition \
-            --cli-input-json "$(jq 'del(.tags)' ${{ steps.seed-task-def.outputs.task-definition }})" \
-            --query 'taskDefinition.taskDefinitionArn' \
-            --output text)
-          echo "task-def-arn=$TASK_DEF_ARN" >> $GITHUB_OUTPUT
-
-      - name: Run seed on ECS
-        run: |
-          SG_ID=$(aws ec2 describe-security-groups \
-            --filters "Name=group-name,Values=benstack-ecs-tasks" \
-            --query 'SecurityGroups[0].GroupId' \
-            --output text)
-
-          TASK_ARN=$(aws ecs run-task \
-            --cluster benstack \
-            --task-definition ${{ steps.register-seed-task-def.outputs.task-def-arn }} \
-            --launch-type FARGATE \
-            --network-configuration "awsvpcConfiguration={subnets=[subnet-0ca001675e47fd157,subnet-083bc2d76e68d266d],securityGroups=[$SG_ID],assignPublicIp=ENABLED}" \
-            --query 'tasks[0].taskArn' \
-            --output text)
-
-          echo "Seed task: $TASK_ARN"
-
-          aws ecs wait tasks-stopped \
-            --cluster benstack \
-            --tasks "$TASK_ARN"
-
-          EXIT_CODE=$(aws ecs describe-tasks \
-            --cluster benstack \
-            --tasks "$TASK_ARN" \
-            --query 'tasks[0].containers[0].exitCode' \
-            --output text)
-
-          echo "Exit code: $EXIT_CODE"
-          [ "$EXIT_CODE" = "0" ] || exit 1
 
   deploy:
     runs-on: ubuntu-latest

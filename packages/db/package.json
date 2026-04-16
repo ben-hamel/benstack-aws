@@ -15,7 +15,7 @@
     "db:studio": "drizzle-kit studio",
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "bun run seed/index.ts",
-    "db:setup": "drizzle-kit push && bun run seed/index.ts",
+    "db:deploy": "bun run db:push && bun run db:seed",
     "db:start": "docker compose up -d",
     "db:watch": "docker compose up",
     "db:stop": "docker compose stop",

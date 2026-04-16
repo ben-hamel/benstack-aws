@@ -29,17 +29,7 @@ COPY --from=pruner-db /app/out/bun.lock ./bun.lock
 RUN bun install --frozen-lockfile
 COPY --from=pruner-db /app/out/full/ .
 WORKDIR /app/packages/db
-CMD ["bun", "run", "db:push"]
-
-# ── Seed ──────────────────────────────────────────────────────────────────────
-FROM oven/bun:${BUN_VERSION} AS seed
-WORKDIR /app
-COPY --from=pruner-db /app/out/json/ .
-COPY --from=pruner-db /app/out/bun.lock ./bun.lock
-RUN bun install --frozen-lockfile
-COPY --from=pruner-db /app/out/full/ .
-WORKDIR /app/packages/db
-CMD ["bun", "run", "db:seed"]
+CMD ["bun", "run", "db:deploy"]
 
 # ── Runner ────────────────────────────────────────────────────────────────────
 FROM oven/bun:${BUN_VERSION}-slim AS runner
