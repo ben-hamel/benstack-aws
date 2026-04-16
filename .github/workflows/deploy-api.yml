@@ -30,7 +30,7 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build and push migration image
         run: |
@@ -137,13 +137,9 @@ jobs:
 
           echo "Seed task: $TASK_ARN"
 
-          timeout 120 aws ecs wait tasks-stopped \
+          aws ecs wait tasks-stopped \
             --cluster benstack \
-            --tasks "$TASK_ARN" || {
-            echo "Seed timed out — stopping task"
-            aws ecs stop-task --cluster benstack --task "$TASK_ARN"
-            exit 1
-          }
+            --tasks "$TASK_ARN"
 
           EXIT_CODE=$(aws ecs describe-tasks \
             --cluster benstack \
@@ -171,7 +167,7 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build and push image
         run: |
