@@ -1,4 +1,6 @@
 import { auth } from "@benstack-aws/auth";
+import { db, eq } from "@benstack-aws/db";
+import * as schema from "@benstack-aws/db/schema/auth";
 import { Hono } from "hono";
 import {
   createJob,
@@ -23,7 +25,17 @@ app.use("*", async (c, next) => {
     return c.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const orgId = session.session.activeOrganizationId;
+  let orgId = session.session.activeOrganizationId;
+
+  if (!orgId) {
+    const [membership] = await db
+      .select({ organizationId: schema.member.organizationId })
+      .from(schema.member)
+      .where(eq(schema.member.userId, session.user.id))
+      .limit(1);
+    orgId = membership?.organizationId ?? null;
+  }
+
   if (!orgId) {
     return c.json({ error: "No active organization" }, { status: 403 });
   }
