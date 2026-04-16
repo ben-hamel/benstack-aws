@@ -272,6 +272,14 @@ export async function getReceipts(organizationId: string) {
     .orderBy(desc(receipts.transactionDate));
 }
 
+export async function deleteAllReceipts(organizationId: string) {
+  const result = await db
+    .delete(receipts)
+    .where(eq(receipts.organizationId, organizationId))
+    .returning({ id: receipts.id });
+  return { deleted: result.length };
+}
+
 export async function getReceiptDetail(receiptId: string, organizationId: string) {
   const [receipt] = await db
     .select()

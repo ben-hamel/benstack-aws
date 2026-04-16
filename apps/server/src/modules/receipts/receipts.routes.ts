@@ -2,6 +2,7 @@ import { auth } from "@benstack-aws/auth";
 import { Hono } from "hono";
 import {
   createJob,
+  deleteAllReceipts,
   getJob,
   getReceiptDetail,
   getReceipts,
@@ -115,6 +116,17 @@ app.get("/:id", async (c) => {
   } catch (error) {
     console.error("Failed to fetch receipt:", error);
     return c.json({ error: "Failed to fetch receipt" }, { status: 500 });
+  }
+});
+
+app.delete("/", async (c) => {
+  const orgId = c.get("orgId");
+  try {
+    const result = await deleteAllReceipts(orgId);
+    return c.json(result);
+  } catch (error) {
+    console.error("Failed to delete receipts:", error);
+    return c.json({ error: "Failed to delete receipts" }, { status: 500 });
   }
 });
 

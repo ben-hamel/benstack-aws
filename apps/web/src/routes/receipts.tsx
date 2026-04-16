@@ -1,7 +1,7 @@
 import { env } from "@benstack-aws/env/web";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { ChevronDownIcon, ChevronUpIcon, FuelIcon, ReceiptTextIcon, UploadIcon } from "lucide-react";
+import { ChevronDownIcon, ChevronUpIcon, FuelIcon, ReceiptTextIcon, Trash2Icon, UploadIcon } from "lucide-react";
 import { useRef, useState } from "react";
 import { authClient } from "@/lib/auth-client";
 
@@ -251,10 +251,25 @@ type UploadState =
   | { status: "error"; message: string };
 
 function RouteComponent() {
+  const queryClient = useQueryClient();
   const { data: receipts = [], isLoading } = useQuery(receiptsQueryOptions());
   const [openId, setOpenId] = useState<string | null>(null);
   const [uploadState, setUploadState] = useState<UploadState>({ status: "idle" });
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const deleteAll = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`${SERVER_URL}/api/receipts`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to delete receipts");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["receipts"] });
+      setOpenId(null);
+    },
+  });
 
   async function handleUpload(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -302,7 +317,22 @@ function RouteComponent() {
             {receipts.length} receipt{receipts.length !== 1 && "s"}
           </p>
         </div>
-        <div>
+        <div className="flex items-center gap-2">
+          {receipts.length > 0 && (
+            <button
+              type="button"
+              className="flex items-center gap-2 text-sm px-3 py-1.5 rounded border border-destructive text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
+              onClick={() => {
+                if (confirm("Delete all receipts? This cannot be undone.")) {
+                  deleteAll.mutate();
+                }
+              }}
+              disabled={deleteAll.isPending}
+            >
+              <Trash2Icon className="h-4 w-4" />
+              {deleteAll.isPending ? "Deleting..." : "Delete All"}
+            </button>
+          )}
           <button
             type="button"
             className="flex items-center gap-2 text-sm px-3 py-1.5 rounded border hover:bg-muted transition-colors disabled:opacity-50"
