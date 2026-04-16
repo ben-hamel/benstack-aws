@@ -78,13 +78,9 @@ jobs:
 
           echo "Migration task: $TASK_ARN"
 
-          timeout 60 aws ecs wait tasks-stopped \
+          aws ecs wait tasks-stopped \
             --cluster benstack \
-            --tasks "$TASK_ARN" || {
-            echo "Migration timed out — stopping task"
-            aws ecs stop-task --cluster benstack --task "$TASK_ARN"
-            exit 1
-          }
+            --tasks "$TASK_ARN"
 
           EXIT_CODE=$(aws ecs describe-tasks \
             --cluster benstack \
