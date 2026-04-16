@@ -385,11 +385,12 @@ resource "aws_lb" "benstack" {
 
 # Target group — ip type required for Fargate
 resource "aws_lb_target_group" "api" {
-  name        = "benstack-api-ecs"
-  port        = 3000
-  protocol    = "HTTP"
-  target_type = "ip"
-  vpc_id      = aws_lb.benstack.vpc_id
+  name                 = "benstack-api-ecs"
+  port                 = 3000
+  protocol             = "HTTP"
+  target_type          = "ip"
+  vpc_id               = aws_lb.benstack.vpc_id
+  deregistration_delay = 60
 
   health_check {
     path                = "/"
