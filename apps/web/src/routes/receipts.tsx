@@ -2,7 +2,7 @@ import { env } from "@benstack-aws/env/web";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { ChevronDownIcon, ChevronUpIcon, FuelIcon, ReceiptTextIcon, Trash2Icon, UploadIcon } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { authClient } from "@/lib/auth-client";
 
 export const Route = createFileRoute("/receipts")({
@@ -16,6 +16,9 @@ export const Route = createFileRoute("/receipts")({
 });
 
 const SERVER_URL = env.VITE_SERVER_URL;
+
+const POLL_INTERVAL_MS = 2_000;
+const POLL_TIMEOUT_MS = 3 * 60 * 1_000; // TODO: consider exponential backoff with jitter
 
 function formatCurrency(val: string | null) {
   if (!val) return "$0.00";
@@ -247,15 +250,63 @@ function ReceiptRow({
 type UploadState =
   | { status: "idle" }
   | { status: "uploading" }
-  | { status: "success"; message: string }
+  | { status: "pending"; jobId: string }
   | { status: "error"; message: string };
+
+type Job = {
+  status: string;
+  imported: number | null;
+  skipped: number | null;
+  errorMessage: string | null;
+};
 
 function RouteComponent() {
   const queryClient = useQueryClient();
-  const { data: receipts = [], isLoading } = useQuery(receiptsQueryOptions());
   const [openId, setOpenId] = useState<string | null>(null);
   const [uploadState, setUploadState] = useState<UploadState>({ status: "idle" });
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const jobId = uploadState.status === "pending" ? uploadState.jobId : null;
+  const pollStartedAt = useRef<number | null>(null);
+
+  if (uploadState.status === "pending" && pollStartedAt.current === null) {
+    pollStartedAt.current = Date.now();
+  } else if (uploadState.status !== "pending") {
+    pollStartedAt.current = null;
+  }
+
+  const pollTimedOut =
+    pollStartedAt.current !== null &&
+    Date.now() - pollStartedAt.current > POLL_TIMEOUT_MS;
+
+  const { data: job } = useQuery<Job>({
+    queryKey: ["jobs", jobId],
+    queryFn: async () => {
+      const res = await fetch(`${SERVER_URL}/api/receipts/jobs/${jobId}`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch job status");
+      return res.json();
+    },
+    enabled: jobId !== null && !pollTimedOut,
+    refetchInterval: (query) => {
+      const s = query.state.data?.status;
+      if (s === "done" || s === "failed") return false;
+      if (pollStartedAt.current && Date.now() - pollStartedAt.current > POLL_TIMEOUT_MS) return false;
+      return POLL_INTERVAL_MS;
+    },
+  });
+
+  const { data: receipts = [], isLoading } = useQuery({
+    ...receiptsQueryOptions(),
+    refetchInterval: job?.status === "processing" || job?.status === "pending" ? 3000 : false,
+  });
+
+  useEffect(() => {
+    if (job?.status === "done") {
+      queryClient.invalidateQueries({ queryKey: ["receipts"] });
+    }
+  }, [job?.status, queryClient]);
 
   const deleteAll = useMutation({
     mutationFn: async () => {
@@ -288,7 +339,7 @@ function RouteComponent() {
         credentials: "include",
       });
       if (!presignRes.ok) throw new Error("Failed to create upload job");
-      const { uploadUrl } = (await presignRes.json()) as { jobId: string; uploadUrl: string };
+      const { jobId: newJobId, uploadUrl } = (await presignRes.json()) as { jobId: string; uploadUrl: string };
 
       const putRes = await fetch(uploadUrl, {
         method: "PUT",
@@ -297,10 +348,7 @@ function RouteComponent() {
       });
       if (!putRes.ok) throw new Error("Failed to upload file to S3");
 
-      setUploadState({
-        status: "success",
-        message: "Upload submitted — refresh in a moment to see your receipts.",
-      });
+      setUploadState({ status: "pending", jobId: newJobId });
     } catch (err) {
       setUploadState({ status: "error", message: err instanceof Error ? err.message : "Upload failed." });
     }
@@ -337,10 +385,10 @@ function RouteComponent() {
             type="button"
             className="flex items-center gap-2 text-sm px-3 py-1.5 rounded border hover:bg-muted transition-colors disabled:opacity-50"
             onClick={() => inputRef.current?.click()}
-            disabled={uploadState.status === "uploading"}
+            disabled={uploadState.status === "uploading" || (uploadState.status === "pending" && job?.status !== "done" && job?.status !== "failed")}
           >
             <UploadIcon className="h-4 w-4" />
-            {uploadState.status === "uploading" ? "Uploading..." : "Upload JSON"}
+            {uploadState.status === "uploading" ? "Uploading..." : (uploadState.status === "pending" && job?.status !== "done" && job?.status !== "failed") ? "Processing..." : "Upload JSON"}
           </button>
           <input
             ref={inputRef}
@@ -352,15 +400,34 @@ function RouteComponent() {
         </div>
       </div>
 
-      {(uploadState.status === "success" || uploadState.status === "error") && (
-        <div
-          className={`rounded-lg border p-3 text-sm ${
-            uploadState.status === "error"
-              ? "border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-400"
-              : "border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-400"
-          }`}
-        >
+      {uploadState.status === "error" && (
+        <div className="rounded-lg border p-3 text-sm border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-400">
           {uploadState.message}
+        </div>
+      )}
+
+      {uploadState.status === "pending" && pollTimedOut && (
+        <div className="rounded-lg border p-3 text-sm border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-400">
+          Processing is taking longer than expected. Please try again or contact support.
+        </div>
+      )}
+
+      {uploadState.status === "pending" && !pollTimedOut && job?.status !== "done" && job?.status !== "failed" && (
+        <div className="rounded-lg border p-3 text-sm border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-400">
+          {job?.status === "processing" ? "Processing receipts..." : job?.status === "pending" ? "Queued..." : "Uploading..."}
+        </div>
+      )}
+
+      {job?.status === "done" && (
+        <div className="rounded-lg border p-3 text-sm border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-400">
+          {(job.imported ?? 0)} receipt{(job.imported ?? 0) !== 1 ? "s" : ""} imported
+          {(job.skipped ?? 0) > 0 && `, ${job.skipped} skipped`}.
+        </div>
+      )}
+
+      {job?.status === "failed" && (
+        <div className="rounded-lg border p-3 text-sm border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-400">
+          {job.errorMessage ?? "Processing failed."}
         </div>
       )}
 
