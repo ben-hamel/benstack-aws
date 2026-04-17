@@ -1,6 +1,6 @@
 # Costco Receipt Tracker — Built on AWS
 
-A full-stack web app for tracking Costco purchases deployed on AWS. Upload receipts using the [Costco Receipts Downloader](https://chromewebstore.google.com/detail/costco-receipts-downloade/nnalnbomehfogoleegpfegaeoofheemn) Chrome extension — the app processes them through an event-driven pipeline built on S3, SQS, Lambda, and RDS, with the API and frontend hosted on ECS. A planned LLM chat feature will let you query your purchase data conversationally.
+A full-stack web app for tracking Costco purchases deployed on AWS. Use the [Costco Receipts Downloader](https://chromewebstore.google.com/detail/costco-receipts-downloade/nnalnbomehfogoleegpfegaeoofheemn) Chrome extension to upload receipts, which get processed through an event-driven pipeline built on S3, SQS, Lambda, and RDS. The API and frontend are hosted on ECS. A planned LLM chat feature will let you query your purchase history conversationally.
 
 ## Architecture
 
@@ -13,29 +13,42 @@ flowchart LR
     Client(["🖥️ Client"])
 
     subgraph AWS["☁️ AWS Cloud"]
-        API["🟥 API Server<br/>ECS"]
-        S3["🪣 S3 Bucket"]
+        CloudFront["🌐 CloudFront"]
+        ALB["⚖️ ALB"]
+        S3Frontend["🪣 S3 Frontend"]
+        S3["🪣 S3 Receipts"]
         SQS["📨 SQS Queue"]
-        Lambda["λ Lambda<br/>receipt-processor"]
-        RDS[("🐘 PostgreSQL<br/>RDS")]
+        S3Endpoint(["S3 VPC Endpoint"])
+        subgraph VPC["🔒 VPC (private subnets)"]
+            API["📦 API Server<br/>ECS"]
+            Lambda["λ Lambda<br/>receipt-processor"]
+            RDS[("🐘 PostgreSQL<br/>RDS")]
+        end
     end
 
-    Client -->|"① Request upload URL"| API
+    Client -->|"load app"| CloudFront
+    CloudFront --> S3Frontend
+    Client -->|"① Request upload URL"| ALB
+    ALB --> API
     API -->|"Upload URL"| Client
     Client -->|"② Upload file"| S3
-    Client -->|"⑤ Check progress"| API
+    Client -->|"⑤ Check progress"| ALB
     API <-->|"Track job status"| RDS
     S3 -->|"③ File uploaded trigger"| SQS
     SQS -->|"④ Start processing"| Lambda
-    Lambda -->|"Download file"| S3
+    Lambda -->|"Download file"| S3Endpoint
+    S3Endpoint -->|"private"| S3
     Lambda <-->|"Save receipts"| RDS
 
-    classDef ecs fill:#FF9900,stroke:#E07B00,color:#000
-    classDef s3 fill:#3F8624,stroke:#2D6119,color:#fff
-    classDef sqs fill:#FF4F8B,stroke:#CC3A6E,color:#fff
-    classDef lambda fill:#FF9900,stroke:#E07B00,color:#000
-    classDef rds fill:#527FFF,stroke:#3A62CC,color:#fff
-    classDef client fill:#232F3E,stroke:#111,color:#fff
+    classDef ecs fill:none,stroke:#FF9900,stroke-width:2px,color:#fff
+    classDef s3 fill:none,stroke:#3F8624,stroke-width:2px,color:#fff
+    classDef sqs fill:none,stroke:#FF4F8B,stroke-width:2px,color:#fff
+    classDef lambda fill:none,stroke:#FF9900,stroke-width:2px,color:#fff
+    classDef rds fill:none,stroke:#527FFF,stroke-width:2px,color:#fff
+    classDef client fill:none,stroke:#aaa,stroke-width:2px,color:#fff
+    classDef alb fill:none,stroke:#8C4FFF,stroke-width:2px,color:#fff
+    classDef cdn fill:none,stroke:#8C4FFF,stroke-width:2px,color:#fff
+    classDef endpoint fill:none,stroke:#666,stroke-dasharray:3 3,color:#aaa
 
     class API ecs
     class S3 s3
@@ -43,9 +56,18 @@ flowchart LR
     class Lambda lambda
     class RDS rds
     class Client client
+    class ALB alb
+    class CloudFront cdn
+    class S3Frontend s3
+    class S3Endpoint endpoint
 
     style AWS fill:none,stroke:#FF9900,stroke-width:2px,color:#fff
+    style VPC fill:none,stroke:#666,stroke-width:1px,stroke-dasharray:4 4,color:#aaa
 ```
+
+### LLM Chat *(coming soon)*
+
+A planned conversational interface for querying your purchase history using an LLM.
 
 ## Tech Stack
 
@@ -76,7 +98,7 @@ flowchart LR
 ### Infrastructure
 
 - ![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white) - Containerisation
-- ![AWS](https://img.shields.io/badge/AWS-FF9900?style=flat-square&logo=amazonaws&logoColor=white) - ECS, Lambda, S3, SQS, RDS
+- ![AWS](https://img.shields.io/badge/AWS-FF9900?style=flat-square&logo=amazonaws&logoColor=white) - ECS, Lambda, S3, SQS, RDS, CloudFront
 - ![Terraform](https://img.shields.io/badge/Terraform-7B42BC?style=flat-square&logo=terraform&logoColor=white) - Infrastructure as code for all AWS resources
 - ![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-2088FF?style=flat-square&logo=githubactions&logoColor=white) - CI/CD pipelines for automated deployments
 
