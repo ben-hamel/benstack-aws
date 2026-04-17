@@ -34,7 +34,7 @@ jobs:
           VITE_SERVER_URL: ${{ vars.VITE_SERVER_URL }}
 
       - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/benstack-github-actions
           aws-region: ${{ vars.AWS_REGION }}
