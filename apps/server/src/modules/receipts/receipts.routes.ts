@@ -109,9 +109,11 @@ app.post("/upload", async (c) => {
 
 app.get("/", async (c) => {
   const orgId = c.get("orgId");
+  const limit = Math.min(Number(c.req.query("limit") ?? 50), 100);
+  const offset = Math.max(Number(c.req.query("offset") ?? 0), 0);
   try {
-    const data = await getReceipts(orgId);
-    return c.json(data);
+    const result = await getReceipts(orgId, limit, offset);
+    return c.json(result);
   } catch (error) {
     console.error("Failed to fetch receipts:", error);
     return c.json({ error: "Failed to fetch receipts" }, { status: 500 });

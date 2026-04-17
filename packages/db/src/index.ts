@@ -5,4 +5,4 @@ import * as schema from "./schema";
 
 export const db = drizzle(env.DATABASE_URL, { schema });
 
-export { desc, eq } from "drizzle-orm";
+export { count, desc, eq } from "drizzle-orm";

@@ -1,6 +1,6 @@
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { db, desc, eq } from "@benstack-aws/db";
+import { count, db, desc, eq } from "@benstack-aws/db";
 import { env } from "@benstack-aws/env/server";
 import {
   receiptItems,
@@ -264,12 +264,23 @@ export async function insertReceipts(
   return { imported, total: data.length, skipped };
 }
 
-export async function getReceipts(organizationId: string) {
-  return db
-    .select()
-    .from(receipts)
-    .where(eq(receipts.organizationId, organizationId))
-    .orderBy(desc(receipts.transactionDate));
+export async function getReceipts(organizationId: string, limit: number, offset: number) {
+  const [rows, [countRow]] = await Promise.all([
+    db
+      .select()
+      .from(receipts)
+      .where(eq(receipts.organizationId, organizationId))
+      .orderBy(desc(receipts.transactionDate))
+      .limit(limit + 1)
+      .offset(offset),
+    db
+      .select({ count: count() })
+      .from(receipts)
+      .where(eq(receipts.organizationId, organizationId)),
+  ]);
+
+  const hasMore = rows.length > limit;
+  return { data: hasMore ? rows.slice(0, limit) : rows, hasMore, total: Number(countRow?.count ?? 0) };
 }
 
 export async function deleteAllReceipts(organizationId: string) {

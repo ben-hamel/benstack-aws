@@ -1,5 +1,5 @@
 import { env } from "@benstack-aws/env/web";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { ChevronDownIcon, ChevronUpIcon, FuelIcon, ReceiptTextIcon, Trash2Icon, UploadIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -67,18 +67,6 @@ type ReceiptDetail = Receipt & {
   }[];
 };
 
-function receiptsQueryOptions() {
-  return {
-    queryKey: ["receipts"],
-    queryFn: async (): Promise<Receipt[]> => {
-      const res = await fetch(`${SERVER_URL}/api/receipts`, {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to fetch receipts");
-      return res.json();
-    },
-  };
-}
 
 function receiptDetailQueryOptions(id: string) {
   return {
@@ -297,10 +285,31 @@ function RouteComponent() {
     },
   });
 
-  const { data: receipts = [], isLoading } = useQuery({
-    ...receiptsQueryOptions(),
+  const {
+    data: receiptsData,
+    isLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
+    queryKey: ["receipts"],
+    queryFn: async ({ pageParam }): Promise<{ data: Receipt[]; hasMore: boolean; total: number }> => {
+      const res = await fetch(`${SERVER_URL}/api/receipts?offset=${pageParam}&limit=10`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch receipts");
+      return res.json();
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      if (!lastPage.hasMore) return undefined;
+      return allPages.reduce((sum, p) => sum + p.data.length, 0);
+    },
     refetchInterval: job?.status === "processing" || job?.status === "pending" ? 3000 : false,
   });
+
+  const receipts = receiptsData?.pages.flatMap((p) => p.data) ?? [];
+  const totalReceipts = receiptsData?.pages[0]?.total ?? 0;
 
   useEffect(() => {
     if (job?.status === "done") {
@@ -362,7 +371,7 @@ function RouteComponent() {
         <div>
           <h2 className="text-2xl font-semibold">Receipts</h2>
           <p className="text-sm text-muted-foreground">
-            {receipts.length} receipt{receipts.length !== 1 && "s"}
+            {receipts.length} of {totalReceipts} receipt{totalReceipts !== 1 && "s"}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -451,6 +460,16 @@ function RouteComponent() {
               onToggle={() => setOpenId((prev) => (prev === r.id ? null : r.id))}
             />
           ))}
+          {hasNextPage && (
+            <button
+              type="button"
+              className="w-full py-2 text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+              onClick={() => fetchNextPage()}
+              disabled={isFetchingNextPage}
+            >
+              {isFetchingNextPage ? "Loading..." : "Load more"}
+            </button>
+          )}
         </div>
       )}
     </div>
