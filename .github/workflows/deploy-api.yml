@@ -72,7 +72,7 @@ jobs:
             --cluster benstack \
             --task-definition ${{ steps.register-migrate-task-def.outputs.task-def-arn }} \
             --launch-type FARGATE \
-            --network-configuration "awsvpcConfiguration={subnets=[subnet-0ca001675e47fd157,subnet-083bc2d76e68d266d],securityGroups=[$SG_ID],assignPublicIp=ENABLED}" \
+            --network-configuration "awsvpcConfiguration={subnets=[${{ vars.VPC_SUBNET_IDS }}],securityGroups=[$SG_ID],assignPublicIp=ENABLED}" \
             --query 'tasks[0].taskArn' \
             --output text)
 
