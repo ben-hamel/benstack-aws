@@ -23,7 +23,7 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/benstack-github-actions
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/benstack-github-actions
           aws-region: ${{ vars.AWS_REGION }}
 
       - name: Login to ECR
@@ -38,8 +38,8 @@ jobs:
             --platform linux/amd64 \
             -f apps/server/Dockerfile \
             --target migrate \
-            -t ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/benstack-api:migrate-${{ github.sha }} \
-            -t ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/benstack-api:migrate-latest \
+            -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/benstack-api:migrate-${{ github.sha }} \
+            -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/benstack-api:migrate-latest \
             --cache-from type=gha \
             --cache-to type=gha,mode=max \
             --push .
@@ -48,9 +48,9 @@ jobs:
         id: migrate-task-def
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
-          task-definition-arn: arn:aws:ecs:${{ vars.AWS_REGION }}:${{ vars.AWS_ACCOUNT_ID }}:task-definition/benstack-migrate
+          task-definition-arn: arn:aws:ecs:${{ vars.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:task-definition/benstack-migrate
           container-name: migrate
-          image: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/benstack-api:migrate-${{ github.sha }}
+          image: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/benstack-api:migrate-${{ github.sha }}
 
       - name: Register migrate task definition
         id: register-migrate-task-def
@@ -72,7 +72,7 @@ jobs:
             --cluster benstack \
             --task-definition ${{ steps.register-migrate-task-def.outputs.task-def-arn }} \
             --launch-type FARGATE \
-            --network-configuration "awsvpcConfiguration={subnets=[${{ vars.VPC_SUBNET_IDS }}],securityGroups=[$SG_ID],assignPublicIp=ENABLED}" \
+            --network-configuration "awsvpcConfiguration={subnets=[${{ secrets.VPC_SUBNET_IDS }}],securityGroups=[$SG_ID],assignPublicIp=ENABLED}" \
             --query 'tasks[0].taskArn' \
             --output text)
 
@@ -102,7 +102,7 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/benstack-github-actions
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/benstack-github-actions
           aws-region: ${{ vars.AWS_REGION }}
 
       - name: Login to ECR
@@ -113,7 +113,7 @@ jobs:
 
       - name: Build and push image
         run: |
-          IMAGE_URI=${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/benstack-api:${{ github.sha }}
+          IMAGE_URI=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/benstack-api:${{ github.sha }}
           docker buildx build \
             --platform linux/amd64 \
             -f apps/server/Dockerfile \
@@ -126,9 +126,9 @@ jobs:
         id: task-def
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
-          task-definition-arn: arn:aws:ecs:${{ vars.AWS_REGION }}:${{ vars.AWS_ACCOUNT_ID }}:task-definition/benstack-api
+          task-definition-arn: arn:aws:ecs:${{ vars.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:task-definition/benstack-api
           container-name: api
-          image: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/benstack-api:${{ github.sha }}
+          image: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/benstack-api:${{ github.sha }}
 
       - name: Deploy to ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
