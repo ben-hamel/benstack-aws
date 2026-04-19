@@ -1,0 +1,10 @@
+aws_region = "us-east-1"
+
+# AWS Console → VPC → Subnets. Pick 2 subnets in different availability zones.
+vpc_subnet_ids = ["subnet-xxxxxxxxxxxxxxxxx", "subnet-xxxxxxxxxxxxxxxxx"]
+
+# AWS Console → VPC → Security Groups. Use the security group attached to your RDS instance.
+rds_security_group_id = "sg-xxxxxxxxxxxxxxxxx"
+
+api_domain = "api.yourdomain.com"
+frontend_domain = "app.yourdomain.com"

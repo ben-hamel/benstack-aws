@@ -5,7 +5,7 @@ provider "aws" {
 data "aws_caller_identity" "current" {}
 
 data "aws_subnet" "primary" {
-  id = "subnet-0ca001675e47fd157"
+  id = var.vpc_subnet_ids[0]
 }
 
 # ── GitHub Actions OIDC ───────────────────────────────────────────────────────
@@ -305,7 +305,7 @@ resource "aws_security_group_rule" "ecs_to_rds" {
   to_port                  = 5432
   protocol                 = "tcp"
   source_security_group_id = aws_security_group.ecs_tasks.id
-  security_group_id        = "sg-01a1dc99f13280bda"
+  security_group_id        = var.rds_security_group_id
 }
 
 resource "aws_ecs_service" "api" {
@@ -317,7 +317,7 @@ resource "aws_ecs_service" "api" {
   enable_execute_command = true
 
   network_configuration {
-    subnets          = ["subnet-0ca001675e47fd157", "subnet-083bc2d76e68d266d"]
+    subnets          = var.vpc_subnet_ids
     security_groups  = [aws_security_group.ecs_tasks.id]
     assign_public_ip = true
   }
@@ -366,7 +366,7 @@ resource "aws_security_group" "alb" {
 
 # ACM certificate
 resource "aws_acm_certificate" "api" {
-  domain_name       = "costco-expense-tracker-api.aws.eastcoastdev.online"
+  domain_name       = var.api_domain
   validation_method = "DNS"
 
   lifecycle {
@@ -380,7 +380,7 @@ resource "aws_lb" "benstack" {
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
-  subnets            = ["subnet-0ca001675e47fd157", "subnet-083bc2d76e68d266d"]
+  subnets            = var.vpc_subnet_ids
 }
 
 # Target group — ip type required for Fargate
@@ -481,7 +481,7 @@ resource "aws_s3_bucket_policy" "frontend" {
 
 # ACM cert for frontend domain (us-east-1 = CloudFront requirement, already our region)
 resource "aws_acm_certificate" "frontend" {
-  domain_name       = "costco-expense-tracker.aws.eastcoastdev.online"
+  domain_name       = var.frontend_domain
   validation_method = "DNS"
 
   lifecycle {
@@ -496,7 +496,7 @@ resource "aws_acm_certificate_validation" "frontend" {
 resource "aws_cloudfront_distribution" "frontend" {
   enabled             = true
   default_root_object = "index.html"
-  aliases             = ["costco-expense-tracker.aws.eastcoastdev.online"]
+  aliases             = [var.frontend_domain]
 
   origin {
     domain_name              = aws_s3_bucket.frontend.bucket_regional_domain_name
@@ -632,7 +632,7 @@ resource "aws_s3_bucket_cors_configuration" "receipts" {
   cors_rule {
     allowed_headers = ["*"]
     allowed_methods = ["PUT"]
-    allowed_origins = ["https://costco-expense-tracker.aws.eastcoastdev.online"]
+    allowed_origins = ["https://${var.frontend_domain}"]
     expose_headers  = ["ETag"]
     max_age_seconds = 3000
   }
@@ -785,7 +785,7 @@ resource "aws_security_group_rule" "lambda_to_rds" {
   to_port                  = 5432
   protocol                 = "tcp"
   source_security_group_id = aws_security_group.lambda_receipt_processor.id
-  security_group_id        = "sg-01a1dc99f13280bda"
+  security_group_id        = var.rds_security_group_id
 }
 
 resource "aws_lambda_function" "receipt_processor" {
@@ -799,7 +799,7 @@ resource "aws_lambda_function" "receipt_processor" {
   memory_size      = 512
 
   vpc_config {
-    subnet_ids         = ["subnet-0ca001675e47fd157", "subnet-083bc2d76e68d266d"]
+    subnet_ids         = var.vpc_subnet_ids
     security_group_ids = [aws_security_group.lambda_receipt_processor.id]
   }
 
@@ -858,7 +858,7 @@ resource "aws_db_instance" "benstack" {
   password = "ignored-managed-outside-terraform"
 
   db_subnet_group_name   = "rds-ec2-db-subnet-group-1"
-  vpc_security_group_ids = ["sg-01a1dc99f13280bda"]
+  vpc_security_group_ids = [var.rds_security_group_id]
 
   publicly_accessible          = false
   multi_az                     = false
