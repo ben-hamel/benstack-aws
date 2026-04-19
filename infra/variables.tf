@@ -1,24 +1,14 @@
 variable "aws_region" {
   description = "AWS region to deploy resources"
   type        = string
-  default     = "us-east-1"
 }
 
 variable "github_repo" {
-  description = "GitHub repo in owner/repo format"
-  type        = string
-  default     = "ben-hamel/benstack-aws"
-}
-
-variable "vpc_subnet_ids" {
-  description = "List of VPC subnet IDs for the ALB, ECS tasks, and Lambda"
-  type        = list(string)
-}
-
-variable "rds_security_group_id" {
-  description = "ID of the security group attached to the RDS instance"
+  description = "GitHub repo in owner/repo format (e.g. owner/repo)"
   type        = string
 }
+
+
 
 variable "api_domain" {
   description = "Custom domain for the API (e.g. api.example.com)"
@@ -29,3 +19,37 @@ variable "frontend_domain" {
   description = "Custom domain for the frontend (e.g. app.example.com)"
   type        = string
 }
+
+variable "hosted_zone_name" {
+  description = "Route 53 hosted zone name for AWS subdomains (e.g. aws.example.com)"
+  type        = string
+}
+
+variable "allowed_emails" {
+  description = "Comma-separated list of emails allowed to sign in"
+  type        = string
+}
+
+variable "better_auth_secret" {
+  description = "Secret key for Better Auth"
+  type        = string
+  sensitive   = true
+}
+
+variable "better_auth_url" {
+  description = "Public URL of the API"
+  type        = string
+}
+
+variable "cors_origin" {
+  description = "Allowed CORS origin (frontend URL)"
+  type        = string
+}
+
+variable "database_url" {
+  description = "PostgreSQL connection string"
+  type        = string
+  sensitive   = true
+}
+
+

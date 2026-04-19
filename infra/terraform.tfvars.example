@@ -1,10 +1,17 @@
-aws_region = "us-east-1"
+# ── AWS ───────────────────────────────────────────────────────────────────────
+aws_region  = "us-east-1"
+github_repo = "owner/repo"
 
-# AWS Console → VPC → Subnets. Pick 2 subnets in different availability zones.
-vpc_subnet_ids = ["subnet-xxxxxxxxxxxxxxxxx", "subnet-xxxxxxxxxxxxxxxxx"]
+# ── Domains ───────────────────────────────────────────────────────────────────
+# After terraform apply, run: terraform output route53_nameservers
+# Add those 4 NS records in your DNS provider for hosted_zone_name to delegate to Route 53.
+hosted_zone_name = "aws.yourdomain.com"
+api_domain       = "api.aws.yourdomain.com"
+frontend_domain  = "app.aws.yourdomain.com"
 
-# AWS Console → VPC → Security Groups. Use the security group attached to your RDS instance.
-rds_security_group_id = "sg-xxxxxxxxxxxxxxxxx"
-
-api_domain = "api.yourdomain.com"
-frontend_domain = "app.yourdomain.com"
+# ── App config (stored in AWS SSM, managed by Terraform) ──────────────────────
+allowed_emails     = "you@example.com"
+better_auth_secret = "generate with: openssl rand -base64 32"
+better_auth_url    = "https://api.aws.yourdomain.com"
+cors_origin        = "https://app.aws.yourdomain.com"
+database_url       = "postgresql://user:password@host:5432/dbname"

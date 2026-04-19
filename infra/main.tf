@@ -4,8 +4,30 @@ provider "aws" {
 
 data "aws_caller_identity" "current" {}
 
+data "aws_vpc" "default" {
+  default = true
+}
+
+data "aws_subnets" "default" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
+  }
+}
+
+data "aws_subnet" "all" {
+  for_each = toset(data.aws_subnets.default.ids)
+  id       = each.value
+}
+
+locals {
+  # ALB requires exactly one subnet per AZ
+  subnets_by_az     = { for s in data.aws_subnet.all : s.availability_zone => s.id... }
+  unique_subnet_ids = [for az, ids in local.subnets_by_az : ids[0]]
+}
+
 data "aws_subnet" "primary" {
-  id = var.vpc_subnet_ids[0]
+  id = local.unique_subnet_ids[0]
 }
 
 # ── GitHub Actions OIDC ───────────────────────────────────────────────────────
@@ -305,7 +327,7 @@ resource "aws_security_group_rule" "ecs_to_rds" {
   to_port                  = 5432
   protocol                 = "tcp"
   source_security_group_id = aws_security_group.ecs_tasks.id
-  security_group_id        = var.rds_security_group_id
+  security_group_id        = aws_security_group.rds.id
 }
 
 resource "aws_ecs_service" "api" {
@@ -317,7 +339,7 @@ resource "aws_ecs_service" "api" {
   enable_execute_command = true
 
   network_configuration {
-    subnets          = var.vpc_subnet_ids
+    subnets          = data.aws_subnets.default.ids
     security_groups  = [aws_security_group.ecs_tasks.id]
     assign_public_ip = true
   }
@@ -380,7 +402,7 @@ resource "aws_lb" "benstack" {
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
-  subnets            = var.vpc_subnet_ids
+  subnets            = local.unique_subnet_ids
 }
 
 # Target group — ip type required for Fargate
@@ -409,7 +431,7 @@ resource "aws_lb_listener" "https" {
   port              = 443
   protocol          = "HTTPS"
   ssl_policy        = "ELBSecurityPolicy-2016-08"
-  certificate_arn   = aws_acm_certificate.api.arn
+  certificate_arn   = aws_acm_certificate_validation.api.certificate_arn
 
   default_action {
     type             = "forward"
@@ -490,7 +512,8 @@ resource "aws_acm_certificate" "frontend" {
 }
 
 resource "aws_acm_certificate_validation" "frontend" {
-  certificate_arn = aws_acm_certificate.frontend.arn
+  certificate_arn         = aws_acm_certificate.frontend.arn
+  validation_record_fqdns = [for record in aws_route53_record.frontend_cert_validation : record.fqdn]
 }
 
 resource "aws_cloudfront_distribution" "frontend" {
@@ -692,11 +715,6 @@ resource "aws_s3_bucket_notification" "receipts" {
 
 # ── Lambda ────────────────────────────────────────────────────────────────────
 
-# Read DATABASE_URL from SSM to pass as Lambda env var
-data "aws_ssm_parameter" "database_url" {
-  name            = "/benstack/database-url"
-  with_decryption = true
-}
 
 # Build the zip from the pre-bundled JS file (run `bun run build:lambda` first)
 data "archive_file" "lambda_receipt_processor" {
@@ -785,7 +803,7 @@ resource "aws_security_group_rule" "lambda_to_rds" {
   to_port                  = 5432
   protocol                 = "tcp"
   source_security_group_id = aws_security_group.lambda_receipt_processor.id
-  security_group_id        = var.rds_security_group_id
+  security_group_id        = aws_security_group.rds.id
 }
 
 resource "aws_lambda_function" "receipt_processor" {
@@ -799,13 +817,13 @@ resource "aws_lambda_function" "receipt_processor" {
   memory_size      = 512
 
   vpc_config {
-    subnet_ids         = var.vpc_subnet_ids
+    subnet_ids         = data.aws_subnets.default.ids
     security_group_ids = [aws_security_group.lambda_receipt_processor.id]
   }
 
   environment {
     variables = {
-      DATABASE_URL = data.aws_ssm_parameter.database_url.value
+      DATABASE_URL = var.database_url
     }
   }
 
@@ -835,7 +853,106 @@ resource "aws_vpc_endpoint" "s3" {
   route_table_ids = data.aws_route_tables.vpc.ids
 }
 
-# ── SSM — S3 bucket name for ECS task ────────────────────────────────────────
+# ── Route 53 ─────────────────────────────────────────────────────────────────
+
+resource "aws_route53_zone" "aws" {
+  name = var.hosted_zone_name
+}
+
+resource "aws_route53_record" "api_cert_validation" {
+  for_each = {
+    for dvo in aws_acm_certificate.api.domain_validation_options : dvo.domain_name => {
+      name   = dvo.resource_record_name
+      record = dvo.resource_record_value
+      type   = dvo.resource_record_type
+    }
+  }
+
+  zone_id         = aws_route53_zone.aws.zone_id
+  name            = each.value.name
+  type            = each.value.type
+  records         = [each.value.record]
+  ttl             = 60
+  allow_overwrite = true
+}
+
+resource "aws_acm_certificate_validation" "api" {
+  certificate_arn         = aws_acm_certificate.api.arn
+  validation_record_fqdns = [for record in aws_route53_record.api_cert_validation : record.fqdn]
+}
+
+resource "aws_route53_record" "frontend_cert_validation" {
+  for_each = {
+    for dvo in aws_acm_certificate.frontend.domain_validation_options : dvo.domain_name => {
+      name   = dvo.resource_record_name
+      record = dvo.resource_record_value
+      type   = dvo.resource_record_type
+    }
+  }
+
+  zone_id         = aws_route53_zone.aws.zone_id
+  name            = each.value.name
+  type            = each.value.type
+  records         = [each.value.record]
+  ttl             = 60
+  allow_overwrite = true
+}
+
+resource "aws_route53_record" "frontend" {
+  zone_id = aws_route53_zone.aws.zone_id
+  name    = var.frontend_domain
+  type    = "A"
+
+  alias {
+    name                   = aws_cloudfront_distribution.frontend.domain_name
+    zone_id                = aws_cloudfront_distribution.frontend.hosted_zone_id
+    evaluate_target_health = false
+  }
+}
+
+resource "aws_route53_record" "api" {
+  zone_id = aws_route53_zone.aws.zone_id
+  name    = var.api_domain
+  type    = "A"
+
+  alias {
+    name                   = aws_lb.benstack.dns_name
+    zone_id                = aws_lb.benstack.zone_id
+    evaluate_target_health = true
+  }
+}
+
+# ── SSM ───────────────────────────────────────────────────────────────────────
+
+resource "aws_ssm_parameter" "allowed_emails" {
+  name  = "/benstack/allowed-emails"
+  type  = "SecureString"
+  value = var.allowed_emails
+}
+
+resource "aws_ssm_parameter" "better_auth_secret" {
+  name  = "/benstack/better-auth-secret"
+  type  = "SecureString"
+  value = var.better_auth_secret
+}
+
+resource "aws_ssm_parameter" "better_auth_url" {
+  name  = "/benstack/better-auth-url"
+  type  = "String"
+  value = var.better_auth_url
+}
+
+resource "aws_ssm_parameter" "cors_origin" {
+  name  = "/benstack/cors-origin"
+  type  = "String"
+  value = var.cors_origin
+}
+
+resource "aws_ssm_parameter" "database_url" {
+  name  = "/benstack/database-url"
+  type  = "SecureString"
+  value = var.database_url
+}
 
 resource "aws_ssm_parameter" "s3_receipts_bucket" {
   name  = "/benstack/s3-receipts-bucket"
@@ -844,6 +961,19 @@ resource "aws_ssm_parameter" "s3_receipts_bucket" {
 }
 
 # ── RDS ───────────────────────────────────────────────────────────────────────
+
+resource "aws_security_group" "rds" {
+  name        = "benstack-rds"
+  description = "Allow inbound Postgres from ECS and Lambda"
+  vpc_id      = data.aws_vpc.default.id
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
 
 resource "aws_db_instance" "benstack" {
   identifier        = "benstack"
@@ -858,7 +988,7 @@ resource "aws_db_instance" "benstack" {
   password = "ignored-managed-outside-terraform"
 
   db_subnet_group_name   = "rds-ec2-db-subnet-group-1"
-  vpc_security_group_ids = [var.rds_security_group_id]
+  vpc_security_group_ids = [aws_security_group.rds.id]
 
   publicly_accessible          = false
   multi_az                     = false
