@@ -1,5 +1,13 @@
 provider "aws" {
   region = var.aws_region
+
+  default_tags {
+    tags = {
+      project     = "benstack"
+      environment = "production"
+      managed_by  = "terraform"
+    }
+  }
 }
 
 data "aws_caller_identity" "current" {}
@@ -151,7 +159,7 @@ resource "aws_iam_role_policy" "github_actions" {
 resource "aws_ecr_repository" "api" {
   name                 = "benstack-api"
   image_tag_mutability = "MUTABLE"
-  force_delete         = true
+  force_delete         = true # production: set to false to prevent accidental image deletion
 }
 
 # ── IAM ───────────────────────────────────────────────────────────────────────
@@ -430,7 +438,7 @@ resource "aws_lb_listener" "https" {
   load_balancer_arn = aws_lb.benstack.arn
   port              = 443
   protocol          = "HTTPS"
-  ssl_policy        = "ELBSecurityPolicy-2016-08"
+  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
   certificate_arn   = aws_acm_certificate_validation.api.certificate_arn
 
   default_action {
@@ -778,6 +786,12 @@ resource "aws_iam_role_policy" "lambda_receipt_processor" {
           "logs:PutLogEvents"
         ]
         Resource = "${aws_cloudwatch_log_group.lambda_receipt_processor.arn}:*"
+      },
+      {
+        Sid    = "SSMReadDatabaseUrl"
+        Effect = "Allow"
+        Action = ["ssm:GetParameter"]
+        Resource = aws_ssm_parameter.database_url.arn
       }
     ]
   })
@@ -785,14 +799,25 @@ resource "aws_iam_role_policy" "lambda_receipt_processor" {
 
 resource "aws_security_group" "lambda_receipt_processor" {
   name        = "benstack-lambda-receipt-processor"
-  description = "Lambda receipt processor - egress to RDS only"
+  description = "Lambda receipt processor"
   vpc_id      = data.aws_subnet.primary.vpc_id
 
   egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [aws_security_group.rds.id]
+    description     = "PostgreSQL to RDS"
+  }
+
+  # Required for the Parameters and Secrets extension to reach the SSM endpoint.
+  # A VPC interface endpoint for SSM would eliminate this public egress.
+  egress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
+    description = "HTTPS to AWS SSM endpoint"
   }
 }
 
@@ -816,6 +841,9 @@ resource "aws_lambda_function" "receipt_processor" {
   timeout          = 300
   memory_size      = 512
 
+  # AWS Parameters and Secrets Lambda Extension — caches SSM values in-process
+  layers = ["arn:aws:lambda:${var.aws_region}:177933569100:layer:AWS-Parameters-and-Secrets-Lambda-Extension:12"]
+
   vpc_config {
     subnet_ids         = data.aws_subnets.default.ids
     security_group_ids = [aws_security_group.lambda_receipt_processor.id]
@@ -823,7 +851,7 @@ resource "aws_lambda_function" "receipt_processor" {
 
   environment {
     variables = {
-      DATABASE_URL = var.database_url
+      SSM_PARAMETER_PATH = aws_ssm_parameter.database_url.name
     }
   }
 
@@ -992,7 +1020,7 @@ resource "aws_db_instance" "benstack" {
 
   publicly_accessible          = false
   multi_az                     = false
-  skip_final_snapshot          = true
+  skip_final_snapshot          = true # production: set to false and add final_snapshot_identifier
   copy_tags_to_snapshot        = true
   max_allocated_storage        = 1000
   performance_insights_enabled = true

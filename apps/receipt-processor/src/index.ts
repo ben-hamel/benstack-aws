@@ -12,7 +12,22 @@ import {
 
 // ── DB connection ────────────────────────────────────────────────────────────
 
-const db: NodePgDatabase = drizzle(process.env.DATABASE_URL!);
+let _db: NodePgDatabase | undefined;
+
+async function getDb(): Promise<NodePgDatabase> {
+  if (_db) return _db;
+  const paramPath = process.env.SSM_PARAMETER_PATH;
+  const sessionToken = process.env.AWS_SESSION_TOKEN;
+  if (!paramPath || !sessionToken) throw new Error("SSM_PARAMETER_PATH or AWS_SESSION_TOKEN not set");
+  const res = await fetch(
+    `http://localhost:2773/systemsmanager/parameters/get?name=${encodeURIComponent(paramPath)}&withDecryption=true`,
+    { headers: { "X-Aws-Parameters-Secrets-Token": sessionToken } },
+  );
+  if (!res.ok) throw new Error(`SSM fetch failed: ${res.status} ${await res.text()}`);
+  const { Parameter } = (await res.json()) as { Parameter: { Value: string } };
+  _db = drizzle(Parameter.Value);
+  return _db;
+}
 
 // ── S3 client ────────────────────────────────────────────────────────────────
 
@@ -98,6 +113,7 @@ function mapReceiptType(receiptType: string): "warehouse" | "gas_station" {
 // ── Insert logic ─────────────────────────────────────────────────────────────
 
 async function insertReceipts(
+  db: NodePgDatabase,
   data: CostcoReceipt[],
   organizationId: string,
   uploadedBy: string,
@@ -237,6 +253,8 @@ async function insertReceipts(
 // ── Lambda handler ───────────────────────────────────────────────────────────
 
 export const handler = async (event: SQSEvent) => {
+  const db = await getDb();
+
   for (const record of event.Records) {
     const body = JSON.parse(record.body) as {
       Records: Array<{ s3: { bucket: { name: string }; object: { key: string } } }>;
@@ -282,7 +300,7 @@ export const handler = async (event: SQSEvent) => {
           : (parsed as { receipts: CostcoReceipt[] }).receipts;
 
         // Process receipts
-        const result = await insertReceipts(data, orgId, job.uploadedBy);
+        const result = await insertReceipts(db, data, orgId, job.uploadedBy);
 
         // Mark job done
         await db
