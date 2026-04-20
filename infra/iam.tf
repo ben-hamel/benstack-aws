@@ -47,7 +47,8 @@ resource "aws_iam_role_policy" "github_actions" {
           "ecr:CompleteLayerUpload",
           "ecr:PutImage",
           "ecr:BatchGetImage",
-          "ecr:GetDownloadUrlForLayer"
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:DescribeImages"
         ]
         Resource = "*"
       },

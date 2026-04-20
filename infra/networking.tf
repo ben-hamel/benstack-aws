@@ -162,6 +162,15 @@ resource "aws_security_group_rule" "vpc_endpoints_from_lambda" {
   security_group_id        = aws_security_group.vpc_endpoints.id
 }
 
+resource "aws_security_group_rule" "vpc_endpoints_from_ecs" {
+  type                     = "ingress"
+  from_port                = 443
+  to_port                  = 443
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.ecs_tasks.id
+  security_group_id        = aws_security_group.vpc_endpoints.id
+}
+
 # ── VPC Endpoints ─────────────────────────────────────────────────────────────
 
 data "aws_route_tables" "vpc" {
