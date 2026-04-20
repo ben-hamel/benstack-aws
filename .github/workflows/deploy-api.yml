@@ -39,7 +39,6 @@ jobs:
             -f apps/server/Dockerfile \
             --target migrate \
             -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/benstack-api:migrate-${{ github.sha }} \
-            -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/benstack-api:migrate-latest \
             --cache-from type=gha \
             --cache-to type=gha,mode=max \
             --push .
