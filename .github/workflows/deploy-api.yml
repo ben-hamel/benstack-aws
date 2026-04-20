@@ -34,14 +34,19 @@ jobs:
 
       - name: Build and push migration image
         run: |
-          docker buildx build \
-            --platform linux/amd64 \
-            -f apps/server/Dockerfile \
-            --target migrate \
-            -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/benstack-api:migrate-${{ github.sha }} \
-            --cache-from type=gha \
-            --cache-to type=gha,mode=max \
-            --push .
+          IMAGE=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/benstack-api:migrate-${{ github.sha }}
+          if aws ecr describe-images --repository-name benstack-api --image-ids imageTag=migrate-${{ github.sha }} > /dev/null 2>&1; then
+            echo "Image already exists, skipping build"
+          else
+            docker buildx build \
+              --platform linux/amd64 \
+              -f apps/server/Dockerfile \
+              --target migrate \
+              -t $IMAGE \
+              --cache-from type=gha \
+              --cache-to type=gha,mode=max \
+              --push .
+          fi
 
       - name: Update migrate task definition with new image
         id: migrate-task-def

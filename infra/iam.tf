@@ -68,7 +68,7 @@ resource "aws_iam_role_policy" "github_actions" {
       {
         Sid      = "EC2Describe"
         Effect   = "Allow"
-        Action   = ["ec2:DescribeSecurityGroups"]
+        Action   = ["ec2:DescribeSecurityGroups", "ec2:DescribeSubnets"]
         Resource = "*"
       },
       {
@@ -95,10 +95,13 @@ resource "aws_iam_role_policy" "github_actions" {
         ]
       },
       {
-        Sid      = "CloudFrontInvalidate"
-        Effect   = "Allow"
-        Action   = "cloudfront:CreateInvalidation"
-        Resource = aws_cloudfront_distribution.frontend.arn
+        Sid    = "CloudFrontInvalidate"
+        Effect = "Allow"
+        Action = [
+          "cloudfront:CreateInvalidation",
+          "cloudfront:ListDistributions"
+        ]
+        Resource = "*"
       },
       {
         Sid    = "LambdaDeploy"
