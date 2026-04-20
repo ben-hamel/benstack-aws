@@ -50,6 +50,10 @@ jobs:
 
       - name: Invalidate CloudFront
         run: |
+          DIST_ID=$(aws cloudfront list-distributions \
+            --query "DistributionList.Items[?Origins.Items[?contains(DomainName, 'benstack-frontend')]].Id" \
+            --output text)
+          echo "::add-mask::$DIST_ID"
           aws cloudfront create-invalidation \
-            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --distribution-id "$DIST_ID" \
             --paths "/*"

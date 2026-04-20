@@ -67,12 +67,19 @@ jobs:
             --filters "Name=group-name,Values=benstack-ecs-tasks" \
             --query 'SecurityGroups[0].GroupId' \
             --output text)
+          echo "::add-mask::$SG_ID"
+
+          SUBNET_IDS=$(aws ec2 describe-subnets \
+            --filters "Name=defaultForAz,Values=true" \
+            --query 'Subnets[*].SubnetId' \
+            --output text | tr '\t' ',')
+          echo "::add-mask::$SUBNET_IDS"
 
           TASK_ARN=$(aws ecs run-task \
             --cluster benstack \
             --task-definition ${{ steps.register-migrate-task-def.outputs.task-def-arn }} \
             --launch-type FARGATE \
-            --network-configuration "awsvpcConfiguration={subnets=[${{ secrets.VPC_SUBNET_IDS }}],securityGroups=[$SG_ID],assignPublicIp=ENABLED}" \
+            --network-configuration "awsvpcConfiguration={subnets=[$SUBNET_IDS],securityGroups=[$SG_ID],assignPublicIp=ENABLED}" \
             --query 'tasks[0].taskArn' \
             --output text)
 
