@@ -33,13 +33,22 @@ data "aws_subnet" "all" {
 }
 
 locals {
-  # ALB requires exactly one subnet per AZ
-  subnets_by_az     = { for s in data.aws_subnet.all : s.availability_zone => s.id... }
-  unique_subnet_ids = [for az, ids in local.subnets_by_az : ids[0]]
+  # Only attach the internet-facing ALB and public-IP ECS tasks to public subnets.
+  public_subnets_by_az = {
+    for s in data.aws_subnet.all : s.availability_zone => s.id...
+    if s.map_public_ip_on_launch
+  }
+  private_subnets_by_az = {
+    for s in data.aws_subnet.all : s.availability_zone => s.id...
+    if !s.map_public_ip_on_launch
+  }
+
+  public_subnet_ids  = [for az in sort(keys(local.public_subnets_by_az)) : local.public_subnets_by_az[az][0]]
+  private_subnet_ids = [for az in sort(keys(local.private_subnets_by_az)) : local.private_subnets_by_az[az][0]]
 }
 
 data "aws_subnet" "primary" {
-  id = local.unique_subnet_ids[0]
+  id = local.public_subnet_ids[0]
 }
 
 # ── GitHub Actions OIDC ───────────────────────────────────────────────────────
@@ -110,9 +119,9 @@ resource "aws_iam_role_policy" "github_actions" {
         Resource = "*"
       },
       {
-        Sid    = "EC2Describe"
-        Effect = "Allow"
-        Action = ["ec2:DescribeSecurityGroups"]
+        Sid      = "EC2Describe"
+        Effect   = "Allow"
+        Action   = ["ec2:DescribeSecurityGroups"]
         Resource = "*"
       },
       {
@@ -162,7 +171,7 @@ resource "aws_iam_role_policy" "github_actions" {
 
 resource "aws_ecr_repository" "api" {
   name                 = "benstack-api"
-  image_tag_mutability = "MUTABLE"
+  image_tag_mutability = "IMMUTABLE"
   force_delete         = true # production: set to false to prevent accidental image deletion
 }
 
@@ -234,9 +243,9 @@ resource "aws_iam_role_policy" "ecs_task_exec_command" {
         Resource = "*"
       },
       {
-        Sid    = "S3ReceiptUpload"
-        Effect = "Allow"
-        Action = ["s3:PutObject"]
+        Sid      = "S3ReceiptUpload"
+        Effect   = "Allow"
+        Action   = ["s3:PutObject"]
         Resource = "${aws_s3_bucket.receipts.arn}/uploads/*"
       }
     ]
@@ -351,7 +360,7 @@ resource "aws_ecs_service" "api" {
   enable_execute_command = true
 
   network_configuration {
-    subnets          = data.aws_subnets.default.ids
+    subnets          = local.public_subnet_ids
     security_groups  = [aws_security_group.ecs_tasks.id]
     assign_public_ip = true
   }
@@ -414,7 +423,7 @@ resource "aws_lb" "benstack" {
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
-  subnets            = local.unique_subnet_ids
+  subnets            = local.public_subnet_ids
 }
 
 # Target group — ip type required for Fargate
@@ -550,15 +559,15 @@ resource "aws_cloudfront_distribution" "frontend" {
 
   # SPA routing: send all 404s back to index.html so React Router handles them
   custom_error_response {
-    error_code            = 404
-    response_code         = 200
-    response_page_path    = "/index.html"
+    error_code         = 404
+    response_code      = 200
+    response_page_path = "/index.html"
   }
 
   custom_error_response {
-    error_code            = 403
-    response_code         = 200
-    response_page_path    = "/index.html"
+    error_code         = 403
+    response_code      = 200
+    response_page_path = "/index.html"
   }
 
   restrictions {
@@ -792,9 +801,9 @@ resource "aws_iam_role_policy" "lambda_receipt_processor" {
         Resource = "${aws_cloudwatch_log_group.lambda_receipt_processor.arn}:*"
       },
       {
-        Sid    = "SSMReadDatabaseUrl"
-        Effect = "Allow"
-        Action = ["ssm:GetParameter"]
+        Sid      = "SSMReadDatabaseUrl"
+        Effect   = "Allow"
+        Action   = ["ssm:GetParameter"]
         Resource = aws_ssm_parameter.database_url.arn
       }
     ]
@@ -806,17 +815,11 @@ resource "aws_security_group" "lambda_receipt_processor" {
   description = "Lambda receipt processor"
   vpc_id      = data.aws_subnet.primary.vpc_id
 
-  egress {
-    from_port       = 5432
-    to_port         = 5432
-    protocol        = "tcp"
-    security_groups = [aws_security_group.rds.id]
-    description     = "PostgreSQL to RDS"
+  lifecycle {
+    ignore_changes = [egress, ingress]
   }
-
 }
 
-# Allow Lambda to reach RDS (mirrors the existing ecs_to_rds rule)
 resource "aws_security_group_rule" "lambda_to_s3" {
   type              = "egress"
   from_port         = 443
@@ -827,14 +830,6 @@ resource "aws_security_group_rule" "lambda_to_s3" {
   description       = "HTTPS to S3 via gateway endpoint"
 }
 
-resource "aws_security_group_rule" "lambda_to_vpc_endpoints" {
-  type                     = "egress"
-  from_port                = 443
-  to_port                  = 443
-  protocol                 = "tcp"
-  source_security_group_id = aws_security_group.vpc_endpoints.id
-  security_group_id        = aws_security_group.lambda_receipt_processor.id
-}
 
 resource "aws_security_group_rule" "lambda_to_rds" {
   type                     = "ingress"
@@ -859,7 +854,7 @@ resource "aws_lambda_function" "receipt_processor" {
   layers = ["arn:aws:lambda:${var.aws_region}:177933569100:layer:AWS-Parameters-and-Secrets-Lambda-Extension:12"]
 
   vpc_config {
-    subnet_ids         = data.aws_subnets.default.ids
+    subnet_ids         = local.public_subnet_ids
     security_group_ids = [aws_security_group.lambda_receipt_processor.id]
   }
 
@@ -882,6 +877,20 @@ resource "aws_lambda_event_source_mapping" "receipt_sqs" {
   batch_size       = 1
 }
 
+
+# ── S3 Gateway VPC Endpoint (free — lets Lambda reach S3 without internet) ───
+
+data "aws_route_tables" "vpc" {
+  vpc_id = data.aws_subnet.primary.vpc_id
+}
+
+resource "aws_vpc_endpoint" "s3" {
+  vpc_id       = data.aws_subnet.primary.vpc_id
+  service_name = "com.amazonaws.${var.aws_region}.s3"
+
+  route_table_ids = data.aws_route_tables.vpc.ids
+}
+
 # ── SSM Interface VPC Endpoint (lets Lambda reach SSM without internet) ──────
 
 resource "aws_security_group" "vpc_endpoints" {
@@ -899,26 +908,22 @@ resource "aws_security_group_rule" "vpc_endpoints_from_lambda" {
   security_group_id        = aws_security_group.vpc_endpoints.id
 }
 
+resource "aws_security_group_rule" "lambda_to_vpc_endpoints" {
+  type                     = "egress"
+  from_port                = 443
+  to_port                  = 443
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.vpc_endpoints.id
+  security_group_id        = aws_security_group.lambda_receipt_processor.id
+}
+
 resource "aws_vpc_endpoint" "ssm" {
   vpc_id              = data.aws_subnet.primary.vpc_id
   service_name        = "com.amazonaws.${var.aws_region}.ssm"
   vpc_endpoint_type   = "Interface"
-  subnet_ids          = local.unique_subnet_ids
+  subnet_ids          = [data.aws_subnet.primary.id]
   security_group_ids  = [aws_security_group.vpc_endpoints.id]
   private_dns_enabled = true
-}
-
-# ── S3 Gateway VPC Endpoint (free — lets Lambda reach S3 without internet) ───
-
-data "aws_route_tables" "vpc" {
-  vpc_id = data.aws_subnet.primary.vpc_id
-}
-
-resource "aws_vpc_endpoint" "s3" {
-  vpc_id       = data.aws_subnet.primary.vpc_id
-  service_name = "com.amazonaws.${var.aws_region}.s3"
-
-  route_table_ids = data.aws_route_tables.vpc.ids
 }
 
 # ── Route 53 ─────────────────────────────────────────────────────────────────
@@ -1019,7 +1024,7 @@ resource "aws_ssm_parameter" "cors_origin" {
 resource "aws_ssm_parameter" "database_url" {
   name  = "/benstack/database-url"
   type  = "SecureString"
-  value = var.database_url
+  value = "postgresql://benstack:${random_password.db.result}@${aws_db_instance.benstack.endpoint}/postgres?sslmode=require&uselibpqcompat=true"
 }
 
 resource "aws_ssm_parameter" "s3_receipts_bucket" {
@@ -1029,6 +1034,17 @@ resource "aws_ssm_parameter" "s3_receipts_bucket" {
 }
 
 # ── RDS ───────────────────────────────────────────────────────────────────────
+
+resource "random_password" "db" {
+  length           = 32
+  special          = true
+  override_special = "!#$%&*()-_=+[]{}<>:?"
+}
+
+resource "aws_db_subnet_group" "benstack" {
+  name       = "benstack"
+  subnet_ids = data.aws_subnets.default.ids
+}
 
 resource "aws_security_group" "rds" {
   name        = "benstack-rds"
@@ -1049,13 +1065,13 @@ resource "aws_db_instance" "benstack" {
   engine            = "postgres"
   engine_version    = "17.6"
   allocated_storage = 20
-  storage_type      = "gp2"
+  storage_type      = "gp3"
   storage_encrypted = true
 
   username = "benstack"
-  password = "ignored-managed-outside-terraform"
+  password = random_password.db.result
 
-  db_subnet_group_name   = "rds-ec2-db-subnet-group-1"
+  db_subnet_group_name   = aws_db_subnet_group.benstack.name
   vpc_security_group_ids = [aws_security_group.rds.id]
 
   publicly_accessible          = false
@@ -1065,7 +1081,4 @@ resource "aws_db_instance" "benstack" {
   max_allocated_storage        = 1000
   performance_insights_enabled = true
 
-  lifecycle {
-    ignore_changes = [password]
-  }
 }

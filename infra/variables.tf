@@ -46,10 +46,4 @@ variable "cors_origin" {
   type        = string
 }
 
-variable "database_url" {
-  description = "PostgreSQL connection string"
-  type        = string
-  sensitive   = true
-}
-
 
