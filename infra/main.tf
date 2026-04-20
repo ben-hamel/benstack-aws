@@ -12,6 +12,10 @@ provider "aws" {
 
 data "aws_caller_identity" "current" {}
 
+data "aws_prefix_list" "s3" {
+  name = "com.amazonaws.${var.aws_region}.s3"
+}
+
 data "aws_vpc" "default" {
   default = true
 }
@@ -810,18 +814,28 @@ resource "aws_security_group" "lambda_receipt_processor" {
     description     = "PostgreSQL to RDS"
   }
 
-  # Required for the Parameters and Secrets extension to reach the SSM endpoint.
-  # A VPC interface endpoint for SSM would eliminate this public egress.
-  egress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "HTTPS to AWS SSM endpoint"
-  }
 }
 
 # Allow Lambda to reach RDS (mirrors the existing ecs_to_rds rule)
+resource "aws_security_group_rule" "lambda_to_s3" {
+  type              = "egress"
+  from_port         = 443
+  to_port           = 443
+  protocol          = "tcp"
+  prefix_list_ids   = [data.aws_prefix_list.s3.id]
+  security_group_id = aws_security_group.lambda_receipt_processor.id
+  description       = "HTTPS to S3 via gateway endpoint"
+}
+
+resource "aws_security_group_rule" "lambda_to_vpc_endpoints" {
+  type                     = "egress"
+  from_port                = 443
+  to_port                  = 443
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.vpc_endpoints.id
+  security_group_id        = aws_security_group.lambda_receipt_processor.id
+}
+
 resource "aws_security_group_rule" "lambda_to_rds" {
   type                     = "ingress"
   from_port                = 5432
@@ -866,6 +880,32 @@ resource "aws_lambda_event_source_mapping" "receipt_sqs" {
   event_source_arn = aws_sqs_queue.receipt_processing.arn
   function_name    = aws_lambda_function.receipt_processor.arn
   batch_size       = 1
+}
+
+# ── SSM Interface VPC Endpoint (lets Lambda reach SSM without internet) ──────
+
+resource "aws_security_group" "vpc_endpoints" {
+  name        = "benstack-vpc-endpoints"
+  description = "Allow HTTPS from Lambda to VPC interface endpoints"
+  vpc_id      = data.aws_subnet.primary.vpc_id
+}
+
+resource "aws_security_group_rule" "vpc_endpoints_from_lambda" {
+  type                     = "ingress"
+  from_port                = 443
+  to_port                  = 443
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.lambda_receipt_processor.id
+  security_group_id        = aws_security_group.vpc_endpoints.id
+}
+
+resource "aws_vpc_endpoint" "ssm" {
+  vpc_id              = data.aws_subnet.primary.vpc_id
+  service_name        = "com.amazonaws.${var.aws_region}.ssm"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = local.unique_subnet_ids
+  security_group_ids  = [aws_security_group.vpc_endpoints.id]
+  private_dns_enabled = true
 }
 
 # ── S3 Gateway VPC Endpoint (free — lets Lambda reach S3 without internet) ───
