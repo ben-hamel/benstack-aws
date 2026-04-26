@@ -4,8 +4,9 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import receiptsRoutes from "./modules/receipts/receipts.routes";
+import type { AppEnv } from "./types/hono";
 
-const app = new Hono();
+const app = new Hono<AppEnv>();
 
 app.use(logger());
 app.use(

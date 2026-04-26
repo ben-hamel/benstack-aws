@@ -1,7 +1,9 @@
-import { auth } from "@benstack-aws/auth";
-import { db, eq } from "@benstack-aws/db";
-import * as schema from "@benstack-aws/db/schema/auth";
 import { Hono } from "hono";
+import {
+  authMiddleware,
+  orgMiddleware,
+} from "../../middleware/auth";
+import type { AppEnv } from "../../types/hono";
 import {
   createJob,
   deleteAllReceipts,
@@ -11,46 +13,20 @@ import {
   insertReceipts,
 } from "./receipts.service";
 
-type Variables = {
-  userId: string;
-  orgId: string;
-};
+const receipts = new Hono<AppEnv>();
 
-const app = new Hono<{ Variables: Variables }>();
+receipts.use("*", authMiddleware);
+receipts.use("*", orgMiddleware);
 
-app.use("*", async (c, next) => {
-  const session = await auth.api.getSession({ headers: c.req.raw.headers });
-
-  if (!session) {
-    return c.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  let orgId = session.session.activeOrganizationId;
-
-  if (!orgId) {
-    const [membership] = await db
-      .select({ organizationId: schema.member.organizationId })
-      .from(schema.member)
-      .where(eq(schema.member.userId, session.user.id))
-      .limit(1);
-    orgId = membership?.organizationId ?? null;
-  }
-
-  if (!orgId) {
-    return c.json({ error: "No active organization" }, { status: 403 });
-  }
-
-  c.set("userId", session.user.id);
-  c.set("orgId", orgId);
-  await next();
-});
-
-app.post("/presign", async (c) => {
-  const userId = c.get("userId");
+receipts.post("/presign", async (c) => {
+  const user = c.get("user");
   const orgId = c.get("orgId");
 
+  if (!user) return c.json({ error: "Unauthorized" }, { status: 401 });
+  if (!orgId) return c.json({ error: "No active organization" }, { status: 403 });
+
   try {
-    const result = await createJob(orgId, userId);
+    const result = await createJob(orgId, user.id);
     return c.json(result);
   } catch (error) {
     console.error("Failed to create upload job:", error);
@@ -58,9 +34,11 @@ app.post("/presign", async (c) => {
   }
 });
 
-app.get("/jobs/:id", async (c) => {
+receipts.get("/jobs/:id", async (c) => {
   const orgId = c.get("orgId");
   const jobId = c.req.param("id");
+
+  if (!orgId) return c.json({ error: "No active organization" }, { status: 403 });
 
   try {
     const job = await getJob(jobId, orgId);
@@ -72,9 +50,12 @@ app.get("/jobs/:id", async (c) => {
   }
 });
 
-app.post("/upload", async (c) => {
-  const userId = c.get("userId");
+receipts.post("/upload", async (c) => {
+  const user = c.get("user");
   const orgId = c.get("orgId");
+
+  if (!user) return c.json({ error: "Unauthorized" }, { status: 401 });
+  if (!orgId) return c.json({ error: "No active organization" }, { status: 403 });
 
   let data: unknown[];
 
@@ -99,7 +80,7 @@ app.post("/upload", async (c) => {
   }
 
   try {
-    const result = await insertReceipts(data as never[], orgId, userId);
+    const result = await insertReceipts(data as never[], orgId, user.id);
     return c.json(result);
   } catch (error) {
     console.error("Failed to import receipts:", error);
@@ -107,10 +88,13 @@ app.post("/upload", async (c) => {
   }
 });
 
-app.get("/", async (c) => {
+receipts.get("/", async (c) => {
   const orgId = c.get("orgId");
   const limit = Math.min(Number(c.req.query("limit") ?? 50), 100);
   const offset = Math.max(Number(c.req.query("offset") ?? 0), 0);
+
+  if (!orgId) return c.json({ error: "No active organization" }, { status: 403 });
+
   try {
     const result = await getReceipts(orgId, limit, offset);
     return c.json(result);
@@ -120,9 +104,12 @@ app.get("/", async (c) => {
   }
 });
 
-app.get("/:id", async (c) => {
+receipts.get("/:id", async (c) => {
   const orgId = c.get("orgId");
   const receiptId = c.req.param("id");
+
+  if (!orgId) return c.json({ error: "No active organization" }, { status: 403 });
+
   try {
     const data = await getReceiptDetail(receiptId, orgId);
     if (!data) return c.json({ error: "Receipt not found" }, { status: 404 });
@@ -133,8 +120,11 @@ app.get("/:id", async (c) => {
   }
 });
 
-app.delete("/", async (c) => {
+receipts.delete("/", async (c) => {
   const orgId = c.get("orgId");
+
+  if (!orgId) return c.json({ error: "No active organization" }, { status: 403 });
+
   try {
     const result = await deleteAllReceipts(orgId);
     return c.json(result);
@@ -144,4 +134,4 @@ app.delete("/", async (c) => {
   }
 });
 
-export default app;
+export default receipts;
