@@ -16,4 +16,4 @@ export function createDb(): NeonHttpDatabase<Schema> {
 
 export const db = createDb();
 
-export { count, desc, eq } from "drizzle-orm";
+export { and, count, desc, eq } from "drizzle-orm";
