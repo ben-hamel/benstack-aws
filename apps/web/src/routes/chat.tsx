@@ -3,16 +3,34 @@ import { DefaultChatTransport } from "ai";
 import { useChat } from "@ai-sdk/react";
 import type { UIMessage } from "ai";
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { LoaderCircleIcon, MessageSquareIcon, PlusIcon, SendIcon, Trash2Icon, SearchIcon, ReceiptIcon, BarChart2Icon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { LoaderCircleIcon, MessageSquareIcon, PlusIcon, SendIcon, Trash2Icon } from "lucide-react";
+import { useEffect, useState } from "react";
 import { authClient } from "@/lib/auth-client";
+import {
+  Conversation,
+  ConversationContent,
+  ConversationEmptyState,
+  ConversationScrollButton,
+} from "@benstack-aws/ui/components/ai-elements/conversation";
+import {
+  Message,
+  MessageContent,
+  MessageResponse,
+} from "@benstack-aws/ui/components/ai-elements/message";
+import {
+  Tool,
+  ToolContent,
+  ToolHeader,
+  ToolInput,
+  ToolOutput,
+} from "@benstack-aws/ui/components/ai-elements/tool";
 
-const TOOL_LABELS: Record<string, { label: string; Icon: React.ElementType }> = {
-  get_spending_summary:  { label: "Calculating spending...",       Icon: BarChart2Icon },
-  search_items:          { label: "Searching receipts...",         Icon: SearchIcon },
-  get_top_items:         { label: "Finding top items...",          Icon: BarChart2Icon },
-  get_recent_receipts:   { label: "Looking up recent receipts...", Icon: ReceiptIcon },
-  get_first_receipt:     { label: "Finding your first receipt...", Icon: ReceiptIcon },
+const TOOL_TITLES: Record<string, string> = {
+  get_spending_summary: "Spending Summary",
+  search_items:         "Search Items",
+  get_top_items:        "Top Items",
+  get_recent_receipts:  "Recent Receipts",
+  get_first_receipt:    "First Receipt",
 };
 
 export const Route = createFileRoute("/chat")({
@@ -229,7 +247,6 @@ function ChatSession({
   onMessageSent: (chatId: string) => void;
 }) {
   const [draft, setDraft] = useState("");
-  const bottomRef = useRef<HTMLDivElement>(null);
 
   const { messages, sendMessage, status, error } = useChat({
     id: chatId,
@@ -239,10 +256,6 @@ function ChatSession({
       credentials: "include",
     }),
   });
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -255,62 +268,61 @@ function ChatSession({
 
   return (
     <div className="grid h-full grid-rows-[1fr_auto]">
-      <div className="overflow-y-auto px-6 py-4">
-        {error ? (
-          <div className="mb-4 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {error.message}
-          </div>
-        ) : null}
+      <Conversation>
+        <ConversationContent>
+          {error && (
+            <div className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {error.message}
+            </div>
+          )}
 
-        {messages.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-            Try "How much did I spend this month?"
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {messages.map((message) => (
+          {messages.length === 0 ? (
+            <ConversationEmptyState
+              title="Ask about your receipts"
+              description='Try "How much did I spend this month?"'
+            />
+          ) : (
+            messages.map((message) => (
               <div key={message.id} className="space-y-2">
-                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  {message.role === "user" ? "You" : "Assistant"}
-                </div>
-                <div className="space-y-2">
-                  {message.parts.map((part, index) => {
-                    if (part.type === "text") {
-                      return (
-                        <div
-                          key={`${message.id}-${index}`}
-                          className="whitespace-pre-wrap rounded-md border bg-background px-3 py-2 text-sm"
-                        >
-                          {part.text}
-                        </div>
-                      );
-                    }
-                    if (part.type === "dynamic-tool" && part.state !== "output-available") {
-                      const meta = TOOL_LABELS[part.toolName] ?? { label: "Working...", Icon: LoaderCircleIcon };
-                      return (
-                        <div
-                          key={`${message.id}-${index}`}
-                          className="flex items-center gap-2 text-xs text-muted-foreground"
-                        >
-                          <meta.Icon className="h-3.5 w-3.5 animate-pulse" />
-                          {meta.label}
-                        </div>
-                      );
-                    }
-                    return null;
-                  })}
-                </div>
+                {message.parts.map((part, index) => {
+                  if (part.type === "text") {
+                    return (
+                      <Message key={`${message.id}-${index}`} from={message.role}>
+                        <MessageContent>
+                          <MessageResponse>{part.text}</MessageResponse>
+                        </MessageContent>
+                      </Message>
+                    );
+                  }
+
+                  if (part.type === "dynamic-tool") {
+                    return (
+                      <Tool
+                        key={`${message.id}-${index}`}
+                        defaultOpen={part.state === "output-available" || part.state === "output-error"}
+                      >
+                        <ToolHeader
+                          type="dynamic-tool"
+                          state={part.state}
+                          toolName={part.toolName}
+                          title={TOOL_TITLES[part.toolName] ?? part.toolName}
+                        />
+                        <ToolContent>
+                          <ToolInput input={part.input} />
+                          <ToolOutput output={part.output} errorText={part.errorText} />
+                        </ToolContent>
+                      </Tool>
+                    );
+                  }
+
+                  return null;
+                })}
               </div>
-            ))}
-
-            {status === "streaming" ? (
-              <div className="text-sm text-muted-foreground">Assistant is responding...</div>
-            ) : null}
-
-            <div ref={bottomRef} />
-          </div>
-        )}
-      </div>
+            ))
+          )}
+        </ConversationContent>
+        <ConversationScrollButton />
+      </Conversation>
 
       <form className="border-t px-4 py-3" onSubmit={handleSubmit}>
         <div className="flex items-end gap-2 rounded-lg border bg-card p-3">
