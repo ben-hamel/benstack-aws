@@ -166,7 +166,10 @@ resource "aws_iam_role_policy" "lambda_receipt_processor" {
           "logs:CreateLogStream",
           "logs:PutLogEvents"
         ]
-        Resource = "${aws_cloudwatch_log_group.lambda_receipt_processor.arn}:*"
+        Resource = [
+          "${aws_cloudwatch_log_group.lambda_receipt_processor.arn}:*",
+          "${aws_cloudwatch_log_group.receipt_processor_serverless.arn}:*",
+        ]
       },
       {
         Sid      = "SSMRead"

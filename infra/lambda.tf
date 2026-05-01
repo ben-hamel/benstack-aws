@@ -4,6 +4,8 @@ data "archive_file" "lambda_receipt_processor" {
   output_path = "${path.module}/../apps/receipt-processor/dist/function.zip"
 }
 
+# ── ECS receipt processor (always deployed, inside VPC, uses RDS) ─────────────
+
 resource "aws_cloudwatch_log_group" "lambda_receipt_processor" {
   name              = "/aws/lambda/benstack-receipt-processor"
   retention_in_days = 7
@@ -19,7 +21,6 @@ resource "aws_lambda_function" "receipt_processor" {
   timeout          = 300
   memory_size      = 512
 
-  # AWS Parameters and Secrets Lambda Extension — caches SSM values in-process
   layers = ["arn:aws:lambda:${var.aws_region}:177933569100:layer:AWS-Parameters-and-Secrets-Lambda-Extension:12"]
 
   vpc_config {
@@ -38,6 +39,38 @@ resource "aws_lambda_function" "receipt_processor" {
     aws_cloudwatch_log_group.lambda_receipt_processor,
   ]
 }
+
+# ── Serverless receipt processor (always deployed, outside VPC, uses Neon) ────
+
+resource "aws_cloudwatch_log_group" "receipt_processor_serverless" {
+  name              = "/aws/lambda/benstack-receipt-processor-serverless"
+  retention_in_days = 7
+}
+
+resource "aws_lambda_function" "receipt_processor_serverless" {
+  filename         = data.archive_file.lambda_receipt_processor.output_path
+  source_code_hash = data.archive_file.lambda_receipt_processor.output_base64sha256
+  function_name    = "benstack-receipt-processor-serverless"
+  role             = aws_iam_role.lambda_receipt_processor.arn
+  handler          = "index.handler"
+  runtime          = "nodejs20.x"
+  timeout          = 300
+  memory_size      = 512
+
+  layers = ["arn:aws:lambda:${var.aws_region}:177933569100:layer:AWS-Parameters-and-Secrets-Lambda-Extension:12"]
+
+  environment {
+    variables = {
+      SSM_PARAMETER_PATH = "/benstack/neon-database-url"
+    }
+  }
+
+  depends_on = [
+    aws_cloudwatch_log_group.receipt_processor_serverless,
+  ]
+}
+
+# ── SQS ───────────────────────────────────────────────────────────────────────
 
 resource "aws_sqs_queue" "receipt_processing_dlq" {
   name                      = "benstack-receipt-processing-dlq"
@@ -77,6 +110,6 @@ resource "aws_sqs_queue_policy" "receipt_processing" {
 
 resource "aws_lambda_event_source_mapping" "receipt_sqs" {
   event_source_arn = aws_sqs_queue.receipt_processing.arn
-  function_name    = aws_lambda_function.receipt_processor.arn
+  function_name    = var.api_mode == "serverless" ? aws_lambda_function.receipt_processor_serverless.arn : aws_lambda_function.receipt_processor.arn
   batch_size       = 1
 }

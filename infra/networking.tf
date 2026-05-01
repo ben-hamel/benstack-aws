@@ -85,6 +85,7 @@ resource "aws_vpc_endpoint" "s3" {
 }
 
 resource "aws_vpc_endpoint" "ssm" {
+  count               = var.api_mode != "serverless" ? 1 : 0
   vpc_id              = aws_vpc.benstack.id
   service_name        = "com.amazonaws.${var.aws_region}.ssm"
   vpc_endpoint_type   = "Interface"
