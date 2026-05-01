@@ -9,6 +9,11 @@ hosted_zone_name = "aws.yourdomain.com"
 api_domain       = "api.aws.yourdomain.com"
 frontend_domain  = "app.aws.yourdomain.com"
 
+# ── Backend mode ──────────────────────────────────────────────────────────────
+# "ecs"        — Fargate + ALB (default)
+# "serverless" — Lambda + API Gateway
+api_mode = "ecs"
+
 # ── App config (stored in AWS SSM, managed by Terraform) ──────────────────────
 allowed_emails     = "you@example.com"
 better_auth_secret = "generate with: openssl rand -base64 32"

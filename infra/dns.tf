@@ -19,6 +19,24 @@ resource "aws_route53_record" "frontend_cert_validation" {
   allow_overwrite = true
 }
 
+resource "aws_route53_record" "api" {
+  zone_id = aws_route53_zone.aws.zone_id
+  name    = var.api_domain
+  type    = "A"
+
+  alias {
+    name                   = one(concat(
+      [for m in module.hono_backend_server : m.alb_dns_name],
+      [for m in module.hono_serverless_api : m.api_gateway_domain_name],
+    ))
+    zone_id                = one(concat(
+      [for m in module.hono_backend_server : m.alb_zone_id],
+      [for m in module.hono_serverless_api : m.api_gateway_hosted_zone_id],
+    ))
+    evaluate_target_health = true
+  }
+}
+
 resource "aws_route53_record" "frontend" {
   zone_id = aws_route53_zone.aws.zone_id
   name    = var.frontend_domain

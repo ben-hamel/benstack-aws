@@ -283,20 +283,6 @@ resource "aws_lb_listener" "http" {
   }
 }
 
-# ── Route53 ───────────────────────────────────────────────────────────────────
-
-resource "aws_route53_record" "api" {
-  zone_id = var.hosted_zone_id
-  name    = var.api_domain
-  type    = "A"
-
-  alias {
-    name                   = aws_lb.benstack.dns_name
-    zone_id                = aws_lb.benstack.zone_id
-    evaluate_target_health = true
-  }
-}
-
 # ── CloudWatch ────────────────────────────────────────────────────────────────
 
 resource "aws_cloudwatch_log_group" "api" {

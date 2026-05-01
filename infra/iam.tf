@@ -73,13 +73,10 @@ resource "aws_iam_role_policy" "github_actions" {
         Resource = "*"
       },
       {
-        Sid    = "PassRole"
-        Effect = "Allow"
-        Action = "iam:PassRole"
-        Resource = [
-          module.hono_backend_server.ecs_execution_role_arn,
-          module.hono_backend_server.ecs_task_role_arn
-        ]
+        Sid      = "PassRole"
+        Effect   = "Allow"
+        Action   = "iam:PassRole"
+        Resource = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/benstack-*"
       },
       {
         Sid    = "S3Frontend"
@@ -110,9 +107,10 @@ resource "aws_iam_role_policy" "github_actions" {
         Action = [
           "lambda:UpdateFunctionCode",
           "lambda:GetFunction",
-          "lambda:GetFunctionConfiguration"
+          "lambda:GetFunctionConfiguration",
+          "lambda:WaitForFunction"
         ]
-        Resource = aws_lambda_function.receipt_processor.arn
+        Resource = "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:benstack-*"
       }
     ]
   })
@@ -171,10 +169,10 @@ resource "aws_iam_role_policy" "lambda_receipt_processor" {
         Resource = "${aws_cloudwatch_log_group.lambda_receipt_processor.arn}:*"
       },
       {
-        Sid      = "SSMReadDatabaseUrl"
+        Sid      = "SSMRead"
         Effect   = "Allow"
-        Action   = ["ssm:GetParameter"]
-        Resource = module.hono_backend_server.database_url_ssm_arn
+        Action   = ["ssm:GetParameter", "ssm:GetParameters"]
+        Resource = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/benstack/*"
       }
     ]
   })

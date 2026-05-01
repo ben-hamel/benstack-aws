@@ -1,0 +1,59 @@
+name: Deploy Serverless API
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "apps/server/**"
+      - "packages/**"
+      - "bun.lock"
+      - ".github/workflows/deploy-serverless-api.yml"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: vars.API_MODE == 'serverless'
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Push schema to Neon
+        run: cd packages/db && bunx drizzle-kit push
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+
+      - name: Build Lambda bundle
+        run: bun run build:lambda
+        working-directory: apps/server
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/benstack-github-actions
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Deploy Lambda
+        run: |
+          cd apps/server/dist/lambda
+          zip function.zip index.js
+
+          aws lambda update-function-code \
+            --function-name benstack-api \
+            --zip-file fileb://function.zip
+
+          aws lambda wait function-updated \
+            --function-name benstack-api
+
+          echo "Deployed successfully"

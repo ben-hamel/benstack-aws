@@ -17,6 +17,7 @@ permissions:
 jobs:
   migrate:
     runs-on: ubuntu-latest
+    if: vars.API_MODE == 'ecs'
     steps:
       - uses: actions/checkout@v6
 
@@ -105,6 +106,7 @@ jobs:
 
   deploy:
     runs-on: ubuntu-latest
+    if: vars.API_MODE == 'ecs'
     needs: migrate
 
     steps:

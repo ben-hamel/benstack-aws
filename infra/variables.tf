@@ -46,4 +46,15 @@ variable "cors_origin" {
   type        = string
 }
 
+variable "api_mode" {
+  description = "Which API backend to deploy: ecs or serverless"
+  type        = string
+  default     = "ecs"
+
+  validation {
+    condition     = contains(["ecs", "serverless"], var.api_mode)
+    error_message = "api_mode must be 'ecs' or 'serverless'."
+  }
+}
+
 
