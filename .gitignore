@@ -49,3 +49,10 @@ coverage
 .cache
 tmp
 temp
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate*.backup
+*.tfstate.lock.info
+.terraform.lock.hcl

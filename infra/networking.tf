@@ -1,36 +1,5 @@
-data "aws_vpc" "default" {
-  default = true
-}
-
-data "aws_subnets" "default" {
-  filter {
-    name   = "vpc-id"
-    values = [data.aws_vpc.default.id]
-  }
-}
-
-data "aws_subnet" "all" {
-  for_each = toset(data.aws_subnets.default.ids)
-  id       = each.value
-}
-
 locals {
-  # Only attach the internet-facing ALB and public-IP ECS tasks to public subnets.
-  public_subnets_by_az = {
-    for s in data.aws_subnet.all : s.availability_zone => s.id...
-    if s.map_public_ip_on_launch
-  }
-  private_subnets_by_az = {
-    for s in data.aws_subnet.all : s.availability_zone => s.id...
-    if !s.map_public_ip_on_launch
-  }
-
-  public_subnet_ids  = [for az in sort(keys(local.public_subnets_by_az)) : local.public_subnets_by_az[az][0]]
-  private_subnet_ids = [for az in sort(keys(local.private_subnets_by_az)) : local.private_subnets_by_az[az][0]]
-}
-
-data "aws_subnet" "primary" {
-  id = local.public_subnet_ids[0]
+  public_subnet_ids = [for az in sort(keys(aws_subnet.public)) : aws_subnet.public[az].id]
 }
 
 data "aws_prefix_list" "s3" {
@@ -42,6 +11,7 @@ data "aws_prefix_list" "s3" {
 resource "aws_security_group" "alb" {
   name        = "benstack-alb"
   description = "Allow HTTP and HTTPS inbound to ALB"
+  vpc_id      = aws_vpc.benstack.id
 
   ingress {
     from_port   = 80
@@ -68,7 +38,7 @@ resource "aws_security_group" "alb" {
 resource "aws_security_group" "ecs_tasks" {
   name        = "benstack-ecs-tasks"
   description = "Allow inbound from ALB on port 3000"
-  vpc_id      = data.aws_subnet.primary.vpc_id
+  vpc_id      = aws_vpc.benstack.id
 
   ingress {
     from_port       = 3000
@@ -88,7 +58,7 @@ resource "aws_security_group" "ecs_tasks" {
 resource "aws_security_group" "rds" {
   name        = "benstack-rds"
   description = "Allow inbound Postgres from ECS and Lambda"
-  vpc_id      = data.aws_vpc.default.id
+  vpc_id      = aws_vpc.benstack.id
 
   egress {
     from_port   = 0
@@ -101,7 +71,7 @@ resource "aws_security_group" "rds" {
 resource "aws_security_group" "lambda_receipt_processor" {
   name        = "benstack-lambda-receipt-processor"
   description = "Lambda receipt processor"
-  vpc_id      = data.aws_subnet.primary.vpc_id
+  vpc_id      = aws_vpc.benstack.id
 
   lifecycle {
     ignore_changes = [egress, ingress]
@@ -111,7 +81,7 @@ resource "aws_security_group" "lambda_receipt_processor" {
 resource "aws_security_group" "vpc_endpoints" {
   name        = "benstack-vpc-endpoints"
   description = "Allow HTTPS from Lambda to VPC interface endpoints"
-  vpc_id      = data.aws_subnet.primary.vpc_id
+  vpc_id      = aws_vpc.benstack.id
 }
 
 # ── Security Group Rules ──────────────────────────────────────────────────────
@@ -173,21 +143,17 @@ resource "aws_security_group_rule" "vpc_endpoints_from_ecs" {
 
 # ── VPC Endpoints ─────────────────────────────────────────────────────────────
 
-data "aws_route_tables" "vpc" {
-  vpc_id = data.aws_subnet.primary.vpc_id
-}
-
 resource "aws_vpc_endpoint" "s3" {
-  vpc_id          = data.aws_subnet.primary.vpc_id
+  vpc_id          = aws_vpc.benstack.id
   service_name    = "com.amazonaws.${var.aws_region}.s3"
-  route_table_ids = data.aws_route_tables.vpc.ids
+  route_table_ids = [aws_route_table.public.id]
 }
 
 resource "aws_vpc_endpoint" "ssm" {
-  vpc_id              = data.aws_subnet.primary.vpc_id
+  vpc_id              = aws_vpc.benstack.id
   service_name        = "com.amazonaws.${var.aws_region}.ssm"
   vpc_endpoint_type   = "Interface"
-  subnet_ids          = [data.aws_subnet.primary.id]
+  subnet_ids          = [local.public_subnet_ids[0]]
   security_group_ids  = [aws_security_group.vpc_endpoints.id]
   private_dns_enabled = true
 }

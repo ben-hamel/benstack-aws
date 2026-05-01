@@ -6,7 +6,7 @@ resource "random_password" "db" {
 
 resource "aws_db_subnet_group" "benstack" {
   name       = "benstack"
-  subnet_ids = data.aws_subnets.default.ids
+  subnet_ids = local.public_subnet_ids
 }
 
 resource "aws_db_instance" "benstack" {
