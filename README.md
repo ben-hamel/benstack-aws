@@ -18,7 +18,7 @@ flowchart LR
         S3Frontend["🪣 S3 Frontend"]
         S3["🪣 S3 Receipts"]
         SQS["📨 SQS Queue"]
-        subgraph VPC["🔒 Default VPC + Security Groups (use Custom VPC, Private subnets, etc in Prod)"]
+        subgraph VPC["🔒 Custom VPC"]
             API["📦 API Server<br/>ECS"]
             Lambda["λ Lambda<br/>receipt-processor"]
             RDS[("🐘 PostgreSQL<br/>RDS")]
@@ -65,7 +65,7 @@ flowchart LR
     style VPC fill:none,stroke:#666,stroke-width:1px,stroke-dasharray:4 4,color:#aaa
 ```
 
-> **Note:** Currently using the AWS default VPC with public subnets and security group isolation for cost savings. A production setup would use a custom VPC with private subnets and a NAT Gateway for full network isolation.
+> **Note:** Using a custom VPC with public subnets. A production setup would add private subnets and a NAT Gateway for full network isolation.
 
 ### LLM Chat *(coming soon)*
 
