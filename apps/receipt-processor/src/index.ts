@@ -1,6 +1,7 @@
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import type { SQSEvent } from "aws-lambda";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
 import { eq } from "drizzle-orm";
 import {
   receiptItems,
@@ -25,7 +26,8 @@ async function getDb(): Promise<NodePgDatabase> {
   );
   if (!res.ok) throw new Error(`SSM fetch failed: ${res.status} ${await res.text()}`);
   const { Parameter } = (await res.json()) as { Parameter: { Value: string } };
-  _db = drizzle(Parameter.Value);
+  const pool = new Pool({ connectionString: Parameter.Value, ssl: true });
+  _db = drizzle(pool);
   return _db;
 }
 

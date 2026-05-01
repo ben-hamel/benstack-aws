@@ -46,7 +46,14 @@ jobs:
             --function-name benstack-receipt-processor \
             --zip-file fileb://function.zip
 
+          aws lambda update-function-code \
+            --function-name benstack-receipt-processor-serverless \
+            --zip-file fileb://function.zip
+
           aws lambda wait function-updated \
             --function-name benstack-receipt-processor
+
+          aws lambda wait function-updated \
+            --function-name benstack-receipt-processor-serverless
 
           echo "Lambda deployed successfully"
