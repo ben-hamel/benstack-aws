@@ -77,8 +77,8 @@ resource "aws_iam_role_policy" "github_actions" {
         Effect = "Allow"
         Action = "iam:PassRole"
         Resource = [
-          aws_iam_role.ecs_execution.arn,
-          aws_iam_role.ecs_task.arn
+          module.hono_backend_server.ecs_execution_role_arn,
+          module.hono_backend_server.ecs_task_role_arn
         ]
       },
       {
@@ -113,80 +113,6 @@ resource "aws_iam_role_policy" "github_actions" {
           "lambda:GetFunctionConfiguration"
         ]
         Resource = aws_lambda_function.receipt_processor.arn
-      }
-    ]
-  })
-}
-
-# ── ECS Roles ─────────────────────────────────────────────────────────────────
-
-resource "aws_iam_role" "ecs_execution" {
-  name = "benstack-ecs-execution"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Service = "ecs-tasks.amazonaws.com" }
-      Action    = "sts:AssumeRole"
-    }]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "ecs_execution" {
-  role       = aws_iam_role.ecs_execution.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
-}
-
-resource "aws_iam_role_policy" "ecs_execution_ssm" {
-  name = "benstack-ecs-ssm"
-  role = aws_iam_role.ecs_execution.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["ssm:GetParameters", "ssm:GetParameter"]
-      Resource = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/benstack/*"
-    }]
-  })
-}
-
-resource "aws_iam_role" "ecs_task" {
-  name = "benstack-ecs-task"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Service = "ecs-tasks.amazonaws.com" }
-      Action    = "sts:AssumeRole"
-    }]
-  })
-}
-
-resource "aws_iam_role_policy" "ecs_task_exec_command" {
-  name = "benstack-ecs-exec-command"
-  role = aws_iam_role.ecs_task.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "ssmmessages:CreateControlChannel",
-          "ssmmessages:CreateDataChannel",
-          "ssmmessages:OpenControlChannel",
-          "ssmmessages:OpenDataChannel"
-        ]
-        Resource = "*"
-      },
-      {
-        Sid      = "S3ReceiptUpload"
-        Effect   = "Allow"
-        Action   = ["s3:PutObject"]
-        Resource = "${aws_s3_bucket.receipts.arn}/uploads/*"
       }
     ]
   })
@@ -248,7 +174,7 @@ resource "aws_iam_role_policy" "lambda_receipt_processor" {
         Sid      = "SSMReadDatabaseUrl"
         Effect   = "Allow"
         Action   = ["ssm:GetParameter"]
-        Resource = aws_ssm_parameter.database_url.arn
+        Resource = module.hono_backend_server.database_url_ssm_arn
       }
     ]
   })

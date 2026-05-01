@@ -22,12 +22,6 @@ resource "aws_ssm_parameter" "cors_origin" {
   value = var.cors_origin
 }
 
-resource "aws_ssm_parameter" "database_url" {
-  name  = "/benstack/database-url"
-  type  = "SecureString"
-  value = "postgresql://benstack:${random_password.db.result}@${aws_db_instance.benstack.endpoint}/postgres?sslmode=require&uselibpqcompat=true"
-}
-
 resource "aws_ssm_parameter" "s3_receipts_bucket" {
   name  = "/benstack/s3-receipts-bucket"
   type  = "String"

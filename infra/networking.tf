@@ -8,53 +8,6 @@ data "aws_prefix_list" "s3" {
 
 # ── Security Groups ───────────────────────────────────────────────────────────
 
-resource "aws_security_group" "alb" {
-  name        = "benstack-alb"
-  description = "Allow HTTP and HTTPS inbound to ALB"
-  vpc_id      = aws_vpc.benstack.id
-
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
-resource "aws_security_group" "ecs_tasks" {
-  name        = "benstack-ecs-tasks"
-  description = "Allow inbound from ALB on port 3000"
-  vpc_id      = aws_vpc.benstack.id
-
-  ingress {
-    from_port       = 3000
-    to_port         = 3000
-    protocol        = "tcp"
-    security_groups = [aws_security_group.alb.id]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
 resource "aws_security_group" "rds" {
   name        = "benstack-rds"
   description = "Allow inbound Postgres from ECS and Lambda"
@@ -85,15 +38,6 @@ resource "aws_security_group" "vpc_endpoints" {
 }
 
 # ── Security Group Rules ──────────────────────────────────────────────────────
-
-resource "aws_security_group_rule" "ecs_to_rds" {
-  type                     = "ingress"
-  from_port                = 5432
-  to_port                  = 5432
-  protocol                 = "tcp"
-  source_security_group_id = aws_security_group.ecs_tasks.id
-  security_group_id        = aws_security_group.rds.id
-}
 
 resource "aws_security_group_rule" "lambda_to_rds" {
   type                     = "ingress"
@@ -129,15 +73,6 @@ resource "aws_security_group_rule" "vpc_endpoints_from_lambda" {
   to_port                  = 443
   protocol                 = "tcp"
   source_security_group_id = aws_security_group.lambda_receipt_processor.id
-  security_group_id        = aws_security_group.vpc_endpoints.id
-}
-
-resource "aws_security_group_rule" "vpc_endpoints_from_ecs" {
-  type                     = "ingress"
-  from_port                = 443
-  to_port                  = 443
-  protocol                 = "tcp"
-  source_security_group_id = aws_security_group.ecs_tasks.id
   security_group_id        = aws_security_group.vpc_endpoints.id
 }
 

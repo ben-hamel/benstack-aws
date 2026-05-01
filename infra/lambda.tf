@@ -29,7 +29,7 @@ resource "aws_lambda_function" "receipt_processor" {
 
   environment {
     variables = {
-      SSM_PARAMETER_PATH = aws_ssm_parameter.database_url.name
+      SSM_PARAMETER_PATH = "/benstack/database-url"
     }
   }
 
