@@ -59,7 +59,7 @@ resource "aws_lambda_function" "api" {
   role             = aws_iam_role.lambda_api.arn
   handler          = "index.handler"
   runtime          = "nodejs20.x"
-  timeout          = 30
+  timeout          = 60
   memory_size      = 512
 
   # AWS Parameters and Secrets Lambda Extension — caches SSM values in-process

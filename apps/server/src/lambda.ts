@@ -5,6 +5,7 @@ const SSM_PARAMS: Record<string, string> = {
   CORS_ORIGIN: "/benstack/cors-origin",
   ALLOWED_EMAILS: "/benstack/allowed-emails",
   S3_RECEIPTS_BUCKET: "/benstack/s3-receipts-bucket",
+  ANTHROPIC_API_KEY: "/benstack/anthropic-api-key",
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
