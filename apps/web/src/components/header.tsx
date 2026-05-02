@@ -8,6 +8,7 @@ export default function Header() {
     { to: "/", label: "Home" },
     { to: "/dashboard", label: "Dashboard" },
     { to: "/receipts", label: "Receipts" },
+    { to: "/chat", label: "Chat" },
   ] as const;
 
   return (

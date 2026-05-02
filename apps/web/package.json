@@ -11,6 +11,7 @@
     "check-types": "vite build && tsc --noEmit"
   },
   "dependencies": {
+    "@ai-sdk/react": "^3.0.170",
     "@benstack-aws/auth": "workspace:*",
     "@benstack-aws/env": "workspace:*",
     "@benstack-aws/ui": "workspace:*",
@@ -19,6 +20,7 @@
     "@tanstack/react-form": "^1.28.0",
     "@tanstack/react-query": "^5.99.0",
     "@tanstack/react-router": "^1.141.1",
+    "ai": "^6.0.168",
     "better-auth": "catalog:",
     "dotenv": "catalog:",
     "lucide-react": "catalog:",
