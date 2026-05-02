@@ -8,7 +8,7 @@ import chatsRoutes from "./modules/chats/chats.routes";
 import { store, checkpointer } from "./modules/chats/chats.service";
 import type { AppEnv } from "./types/hono";
 
-await Promise.all([store.setup(), checkpointer.setup()]);
+export const setupPromise = Promise.all([store.setup(), checkpointer.setup()]);
 
 const app = new Hono<AppEnv>();
 

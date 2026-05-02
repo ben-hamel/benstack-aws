@@ -24,11 +24,12 @@ async function init() {
     process.env[envKey] = Parameter.Value;
   }
 
-  const [{ handle }, { app }] = await Promise.all([
+  const [{ handle }, { app, setupPromise }] = await Promise.all([
     import("hono/aws-lambda"),
     import("./index"),
   ]);
 
+  await setupPromise;
   return handle(app);
 }
 
