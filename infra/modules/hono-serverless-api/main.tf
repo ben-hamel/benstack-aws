@@ -48,7 +48,7 @@ resource "aws_cloudwatch_log_group" "lambda_api" {
 
 data "archive_file" "lambda_api" {
   type        = "zip"
-  source_file = "${path.module}/../../../apps/server/dist/lambda/index.js"
+  source_file = "${path.module}/../../../apps/server/dist/lambda/index.mjs"
   output_path = "${path.module}/../../../apps/server/dist/lambda/function.zip"
 }
 

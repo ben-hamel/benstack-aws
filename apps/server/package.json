@@ -4,7 +4,7 @@
   "main": "src/index.ts",
   "scripts": {
     "build": "tsdown",
-    "build:lambda": "bun build src/lambda.ts --outfile dist/lambda/index.js --target node --bundle --format cjs",
+    "build:lambda": "bun build src/lambda.ts --outfile dist/lambda/index.mjs --target node --bundle --format esm",
     "check-types": "tsc -b",
     "compile": "bun build --compile --minify --sourcemap --bytecode ./src/index.ts --outfile server",
     "dev": "bun run --hot src/index.ts",

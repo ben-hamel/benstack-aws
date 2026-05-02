@@ -47,7 +47,7 @@ jobs:
       - name: Deploy Lambda
         run: |
           cd apps/server/dist/lambda
-          zip function.zip index.js
+          zip function.zip index.mjs
 
           aws lambda update-function-code \
             --function-name benstack-api \
