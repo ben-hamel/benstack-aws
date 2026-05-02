@@ -1,7 +1,9 @@
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import type { SQSEvent } from "aws-lambda";
-import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
+import { neon } from "@neondatabase/serverless";
+import { drizzle as drizzleNeon, type NeonHttpDatabase } from "drizzle-orm/neon-http";
 import { Pool } from "pg";
+import { drizzle as drizzlePg, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { eq } from "drizzle-orm";
 import {
   receiptItems,
@@ -13,9 +15,10 @@ import {
 
 // ── DB connection ────────────────────────────────────────────────────────────
 
-let _db: NodePgDatabase | undefined;
+type Db = NeonHttpDatabase | NodePgDatabase;
+let _db: Db | undefined;
 
-async function getDb(): Promise<NodePgDatabase> {
+async function getDb(): Promise<Db> {
   if (_db) return _db;
   const paramPath = process.env.SSM_PARAMETER_PATH;
   const sessionToken = process.env.AWS_SESSION_TOKEN;
@@ -26,8 +29,11 @@ async function getDb(): Promise<NodePgDatabase> {
   );
   if (!res.ok) throw new Error(`SSM fetch failed: ${res.status} ${await res.text()}`);
   const { Parameter } = (await res.json()) as { Parameter: { Value: string } };
-  const pool = new Pool({ connectionString: Parameter.Value, ssl: true });
-  _db = drizzle(pool);
+  if (Parameter.Value.includes(".neon.tech")) {
+    _db = drizzleNeon(neon(Parameter.Value));
+  } else {
+    _db = drizzlePg(new Pool({ connectionString: Parameter.Value }));
+  }
   return _db;
 }
 
