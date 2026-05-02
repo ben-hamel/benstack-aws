@@ -24,7 +24,7 @@ async function init() {
     process.env[envKey] = Parameter.Value;
   }
 
-  const [{ handle }, { default: app }] = await Promise.all([
+  const [{ handle }, { app }] = await Promise.all([
     import("hono/aws-lambda"),
     import("./index"),
   ]);

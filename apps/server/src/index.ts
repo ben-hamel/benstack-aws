@@ -35,6 +35,8 @@ app.get("/health", (c) => {
   return c.text("healthy");
 });
 
+export { app };
+
 export default {
   fetch: app.fetch,
   idleTimeout: 60,
