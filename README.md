@@ -1,10 +1,18 @@
 # Costco Receipt Tracker — Built on AWS
 
-A full-stack web app for tracking Costco purchases deployed on AWS. Use the [Costco Receipts Downloader](https://chromewebstore.google.com/detail/costco-receipts-downloade/nnalnbomehfogoleegpfegaeoofheemn) Chrome extension to upload receipts, which get processed through an event-driven pipeline built on S3, SQS, Lambda, and RDS. The API and frontend are hosted on ECS. A planned LLM chat feature will let you query your purchase history conversationally.
+A full-stack web app for tracking Costco purchases deployed on AWS. Use the [Costco Receipts Downloader](https://chromewebstore.google.com/detail/costco-receipts-downloade/nnalnbomehfogoleegpfegaeoofheemn) Chrome extension to upload receipts, which get processed through an event-driven pipeline built on S3, SQS, Lambda, and RDS. The app supports two deployment modes — **ECS (server)** and **serverless** — switchable via a Terraform variable. A planned LLM chat feature will let you query your purchase history conversationally.
 
 ## Architecture
 
-### Receipt Upload Pipeline
+This project supports two deployment modes. Both share the same frontend (CloudFront + S3) and receipt upload pipeline (S3 + SQS + Lambda), but differ in how the API is hosted and where data is stored.
+
+| | Server (ECS) | Serverless |
+|---|---|---|
+| **API** | ECS container behind ALB | Lambda behind API Gateway |
+| **Database** | PostgreSQL on RDS | Neon (serverless Postgres) |
+| **VPC** | ✅ Custom VPC | ❌ Not required |
+
+### Server Architecture (ECS)
 
 Receipt uploads are handled asynchronously through an event-driven AWS pipeline. The client gets a presigned S3 URL, uploads directly to S3, and a Lambda function processes the file in the background while the UI polls for progress. All infrastructure is provisioned as code using Terraform.
 
@@ -66,6 +74,64 @@ flowchart LR
 ```
 
 > **Note:** Using a custom VPC with public subnets. A production setup would add private subnets and a NAT Gateway for full network isolation.
+
+---
+
+### Serverless Architecture
+
+The serverless deployment replaces ECS and RDS with Lambda and [Neon](https://neon.tech) (serverless Postgres), removing the need for a custom VPC entirely. The API runs as a Lambda function behind API Gateway, and the receipt processor Lambda also runs outside a VPC, connecting directly to Neon over the internet.
+
+```mermaid
+flowchart LR
+    Client(["🖥️ Client"])
+
+    subgraph AWS["☁️ AWS Cloud"]
+        CloudFront["🌐 CloudFront"]
+        S3Frontend["🪣 S3 Frontend"]
+        S3["🪣 S3 Receipts"]
+        SQS["📨 SQS Queue"]
+        APIGateway["🔀 API Gateway\nHTTP API"]
+        LambdaAPI["λ Lambda\nbenstack-api"]
+        LambdaProcessor["λ Lambda\nreceipt-processor"]
+        SSM["🔑 SSM\nParameter Store"]
+    end
+
+    Neon[("🐘 Neon\nServerless Postgres")]
+
+    Client -->|"load app"| CloudFront
+    CloudFront --> S3Frontend
+    Client -->|"① Request upload URL"| APIGateway
+    APIGateway --> LambdaAPI
+    LambdaAPI -->|"Upload URL"| Client
+    LambdaAPI <-->|"fetch config"| SSM
+    Client -->|"② Upload file"| S3
+    Client -->|"⑤ Check progress"| APIGateway
+    LambdaAPI <-->|"Track job status"| Neon
+    S3 -->|"③ File uploaded trigger"| SQS
+    SQS -->|"④ Start processing"| LambdaProcessor
+    LambdaProcessor <-->|"fetch config"| SSM
+    LambdaProcessor <-->|"Save receipts"| Neon
+
+    classDef gateway fill:none,stroke:#8C4FFF,stroke-width:2px,color:#fff
+    classDef lambda fill:none,stroke:#FF9900,stroke-width:2px,color:#fff
+    classDef s3 fill:none,stroke:#3F8624,stroke-width:2px,color:#fff
+    classDef sqs fill:none,stroke:#FF4F8B,stroke-width:2px,color:#fff
+    classDef neon fill:none,stroke:#00E599,stroke-width:2px,color:#fff
+    classDef ssm fill:none,stroke:#DD344C,stroke-width:2px,color:#fff
+    classDef client fill:none,stroke:#aaa,stroke-width:2px,color:#fff
+    classDef cdn fill:none,stroke:#8C4FFF,stroke-width:2px,color:#fff
+
+    class APIGateway gateway
+    class LambdaAPI,LambdaProcessor lambda
+    class S3,S3Frontend s3
+    class SQS sqs
+    class Neon neon
+    class SSM ssm
+    class Client client
+    class CloudFront cdn
+
+    style AWS fill:none,stroke:#FF9900,stroke-width:2px,color:#fff
+```
 
 ### LLM Chat *(coming soon)*
 
