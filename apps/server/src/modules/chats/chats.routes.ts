@@ -5,7 +5,7 @@ import { createUIMessageStreamResponse, type UIMessage } from "ai";
 import { Hono } from "hono";
 import { authMiddleware, orgMiddleware } from "../../middleware/auth";
 import type { AppEnv } from "../../types/hono";
-import { checkpointer, createChatStream } from "./chats.service";
+import { checkpointer, createChatStream, generateChatTitle } from "./chats.service";
 
 const chatsRoutes = new Hono<AppEnv>();
 
@@ -88,6 +88,29 @@ chatsRoutes.get("/:id/messages", async (c) => {
   return c.json({ messages });
 });
 
+chatsRoutes.patch("/:id", async (c) => {
+  const user = c.get("user");
+  const chatId = c.req.param("id");
+
+  if (!user) return c.json({ error: "Unauthorized" }, { status: 401 });
+
+  const chat = await db.query.chats.findFirst({ where: eq(chats.id, chatId) });
+  if (!chat) return c.json({ error: "Chat not found" }, { status: 404 });
+  if (chat.userId !== user.id) return c.json({ error: "Forbidden" }, { status: 403 });
+
+  const { title } = await c.req.json<{ title: string }>();
+  const trimmed = title?.trim();
+  if (!trimmed) return c.json({ error: "Title is required" }, { status: 400 });
+
+  const [updated] = await db
+    .update(chats)
+    .set({ title: trimmed })
+    .where(eq(chats.id, chatId))
+    .returning({ id: chats.id, title: chats.title });
+
+  return c.json(updated);
+});
+
 chatsRoutes.delete("/:id", async (c) => {
   const user = c.get("user");
   const chatId = c.req.param("id");
@@ -127,6 +150,14 @@ chatsRoutes.post("/:id/messages", async (c) => {
   const text = lastMessage.parts.find((p) => p.type === "text")?.text ?? "";
 
   await db.update(chats).set({ updatedAt: new Date() }).where(eq(chats.id, chatId));
+
+  if (!chat.title) {
+    generateChatTitle(text)
+      .then((title) =>
+        db.update(chats).set({ title }).where(eq(chats.id, chatId)),
+      )
+      .catch((err) => console.error("[chats] title generation failed:", err));
+  }
 
   // biome-ignore lint/suspicious/noExplicitAny: LangGraph stream type varies by streamMode
   let stream: AsyncIterable<any>;

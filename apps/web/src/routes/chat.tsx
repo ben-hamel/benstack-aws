@@ -3,9 +3,17 @@ import { DefaultChatTransport } from "ai";
 import { useChat } from "@ai-sdk/react";
 import type { UIMessage } from "ai";
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { LoaderCircleIcon, MessageSquareIcon, PlusIcon, SendIcon, Trash2Icon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { LoaderCircleIcon, MessageSquareIcon, MoreHorizontalIcon, PencilIcon, PlusIcon, SendIcon, Trash2Icon } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 import { authClient } from "@/lib/auth-client";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@benstack-aws/ui/components/dropdown-menu";
 import {
   Conversation,
   ConversationContent,
@@ -27,10 +35,10 @@ import {
 
 const TOOL_TITLES: Record<string, string> = {
   get_spending_summary: "Spending Summary",
-  search_items:         "Search Items",
-  get_top_items:        "Top Items",
-  get_recent_receipts:  "Recent Receipts",
-  get_first_receipt:    "First Receipt",
+  search_items: "Search Items",
+  get_top_items: "Top Items",
+  get_recent_receipts: "Recent Receipts",
+  get_first_receipt: "First Receipt",
 };
 
 export const Route = createFileRoute("/chat")({
@@ -73,18 +81,84 @@ function formatDate(iso: string) {
 }
 
 function RouteComponent() {
-  const [chats, setChats] = useState<ChatRecord[]>([]);
+  const queryClient = useQueryClient();
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [renamingChatId, setRenamingChatId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    apiFetch<{ chats: ChatRecord[] }>("/api/chats")
-      .then(({ chats }) => setChats(chats))
-      .catch(console.error);
-  }, []);
+    if (renamingChatId) {
+      const timer = setTimeout(() => {
+        renameInputRef.current?.focus();
+        renameInputRef.current?.select();
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [renamingChatId]);
+
+  const { data: chats = [] } = useQuery({
+    queryKey: ["chats"],
+    queryFn: () =>
+      apiFetch<{ chats: ChatRecord[] }>("/api/chats").then((r) => r.chats),
+  });
+
+  const newChatMutation = useMutation({
+    mutationFn: () => apiFetch<ChatRecord>("/api/chats", { method: "POST" }),
+    onSuccess: (chat) => {
+      queryClient.invalidateQueries({ queryKey: ["chats"] });
+      setActiveChatId(chat.id);
+      setInitialMessages([]);
+    },
+  });
+
+  const renameChatMutation = useMutation({
+    mutationFn: ({ id, title }: { id: string; title: string }) =>
+      apiFetch(`/api/chats/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      }),
+    onMutate: async ({ id, title }) => {
+      await queryClient.cancelQueries({ queryKey: ["chats"] });
+      const previous = queryClient.getQueryData<ChatRecord[]>(["chats"]);
+      queryClient.setQueryData<ChatRecord[]>(["chats"], (prev = []) =>
+        prev.map((c) => (c.id === id ? { ...c, title } : c)),
+      );
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      queryClient.setQueryData(["chats"], context?.previous);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["chats"] });
+    },
+  });
+
+  const deleteChatMutation = useMutation({
+    mutationFn: (chat: ChatRecord) =>
+      apiFetch(`/api/chats/${chat.id}`, { method: "DELETE" }),
+    onMutate: async (chat) => {
+      await queryClient.cancelQueries({ queryKey: ["chats"] });
+      const previous = queryClient.getQueryData<ChatRecord[]>(["chats"]);
+      queryClient.setQueryData<ChatRecord[]>(["chats"], (prev = []) =>
+        prev.filter((c) => c.id !== chat.id),
+      );
+      if (activeChatId === chat.id) {
+        setActiveChatId(null);
+        setInitialMessages([]);
+      }
+      return { previous };
+    },
+    onError: (_err, _chat, context) => {
+      queryClient.setQueryData(["chats"], context?.previous);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["chats"] });
+    },
+  });
 
   async function openChat(chat: ChatRecord) {
     if (chat.id === activeChatId) return;
@@ -103,43 +177,35 @@ function RouteComponent() {
     }
   }
 
-  async function newChat() {
-    setCreating(true);
-    try {
-      const chat = await apiFetch<ChatRecord>("/api/chats", { method: "POST" });
-      setChats((prev) => [chat, ...prev]);
-      setActiveChatId(chat.id);
-      setInitialMessages([]);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setCreating(false);
-    }
-  }
-
   async function deleteChat(chat: ChatRecord) {
     if (!window.confirm(`Delete "${chat.title ?? "New conversation"}"? This cannot be undone.`)) return;
-    setDeletingId(chat.id);
-    try {
-      await apiFetch(`/api/chats/${chat.id}`, { method: "DELETE" });
-      setChats((prev) => prev.filter((c) => c.id !== chat.id));
-      if (activeChatId === chat.id) {
-        setActiveChatId(null);
-        setInitialMessages([]);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setDeletingId(null);
+    deleteChatMutation.mutate(chat);
+  }
+
+  function startRename(chat: ChatRecord) {
+    setRenamingChatId(chat.id);
+    setRenameValue(chat.title ?? "");
+  }
+
+  function commitRename(chat: ChatRecord) {
+    const trimmed = renameValue.trim();
+    setRenamingChatId(null);
+    if (trimmed && trimmed !== chat.title) {
+      renameChatMutation.mutate({ id: chat.id, title: trimmed });
     }
   }
 
+  // Optimistically sort the active chat to the top when a message is sent
   function onMessageSent(chatId: string) {
-    setChats((prev) =>
+    queryClient.setQueryData<ChatRecord[]>(["chats"], (prev = []) =>
       [...prev]
         .map((c) => (c.id === chatId ? { ...c, updatedAt: new Date().toISOString() } : c))
         .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
     );
+  }
+
+  function onStreamEnd(_chatId: string) {
+    queryClient.invalidateQueries({ queryKey: ["chats"] });
   }
 
   const activeChat = chats.find((c) => c.id === activeChatId);
@@ -150,11 +216,11 @@ function RouteComponent() {
       <aside className="flex flex-col gap-2 overflow-hidden border-r bg-card px-2 py-3">
         <button
           type="button"
-          onClick={() => void newChat()}
-          disabled={creating}
+          onClick={() => newChatMutation.mutate()}
+          disabled={newChatMutation.isPending}
           className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-accent disabled:opacity-50"
         >
-          {creating ? (
+          {newChatMutation.isPending ? (
             <LoaderCircleIcon className="h-4 w-4 animate-spin" />
           ) : (
             <PlusIcon className="h-4 w-4" />
@@ -169,29 +235,58 @@ function RouteComponent() {
             <ul className="space-y-0.5">
               {chats.map((chat) => (
                 <li key={chat.id} className="group relative">
-                  <button
-                    type="button"
-                    onClick={() => void openChat(chat)}
-                    className={`w-full rounded-md px-3 py-2 pr-8 text-left text-sm hover:bg-accent ${
-                      chat.id === activeChatId ? "bg-accent font-medium" : ""
-                    }`}
-                  >
-                    <div className="truncate">{chat.title ?? "New conversation"}</div>
-                    <div className="text-xs text-muted-foreground">{formatDate(chat.updatedAt)}</div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void deleteChat(chat)}
-                    disabled={deletingId === chat.id}
-                    className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 opacity-0 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 disabled:opacity-50"
-                    aria-label="Delete chat"
-                  >
-                    {deletingId === chat.id ? (
-                      <LoaderCircleIcon className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Trash2Icon className="h-3.5 w-3.5" />
-                    )}
-                  </button>
+                  {renamingChatId === chat.id ? (
+                    <input
+                      ref={renameInputRef}
+                      className="w-full rounded-md bg-accent px-3 py-2 text-sm outline-none ring-1 ring-ring"
+                      value={renameValue}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      onBlur={() => commitRename(chat)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") commitRename(chat);
+                        if (e.key === "Escape") setRenamingChatId(null);
+                      }}
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => void openChat(chat)}
+                      className={`w-full cursor-pointer select-none rounded-md px-3 py-2 pr-8 text-left text-sm hover:bg-accent ${chat.id === activeChatId ? "bg-accent font-medium" : ""}`}
+                    >
+                      <div className="truncate">{chat.title ?? "New conversation"}</div>
+                      <div className="text-xs text-muted-foreground">{formatDate(chat.updatedAt)}</div>
+                    </button>
+                  )}
+
+                  {renamingChatId !== chat.id && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        className="absolute right-1 top-1/2 -translate-y-1/2 cursor-pointer rounded p-1 opacity-0 hover:bg-accent group-hover:opacity-100"
+                        aria-label="Chat options"
+                      >
+                        <MoreHorizontalIcon className="h-3.5 w-3.5" />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent side="right" align="start">
+                        <DropdownMenuItem onClick={() => startRename(chat)}>
+                          <PencilIcon />
+                          Rename
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onClick={() => void deleteChat(chat)}
+                          disabled={deleteChatMutation.isPending && deleteChatMutation.variables?.id === chat.id}
+                        >
+                          {deleteChatMutation.isPending && deleteChatMutation.variables?.id === chat.id ? (
+                            <LoaderCircleIcon className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Trash2Icon />
+                          )}
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
                 </li>
               ))}
             </ul>
@@ -229,6 +324,7 @@ function RouteComponent() {
               chatId={activeChatId}
               initialMessages={initialMessages}
               onMessageSent={onMessageSent}
+              onStreamEnd={onStreamEnd}
             />
           )}
         </div>
@@ -241,12 +337,15 @@ function ChatSession({
   chatId,
   initialMessages,
   onMessageSent,
+  onStreamEnd,
 }: {
   chatId: string;
   initialMessages: UIMessage[];
   onMessageSent: (chatId: string) => void;
+  onStreamEnd: (chatId: string) => void;
 }) {
   const [draft, setDraft] = useState("");
+  const prevStatus = useRef<string>("ready");
 
   const { messages, sendMessage, status, error } = useChat({
     id: chatId,
@@ -256,6 +355,13 @@ function ChatSession({
       credentials: "include",
     }),
   });
+
+  useEffect(() => {
+    if (prevStatus.current !== "ready" && status === "ready" && messages.length > 0) {
+      onStreamEnd(chatId);
+    }
+    prevStatus.current = status;
+  }, [status, chatId, messages.length, onStreamEnd]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
