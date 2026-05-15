@@ -19,5 +19,6 @@ export const costcoItemCategoryMap = referenceSchema.table(
     categoryId: integer("category_id")
       .notNull()
       .references(() => spendingCategories.id),
+    samedayProductId: text("sameday_product_id"),
   },
 );

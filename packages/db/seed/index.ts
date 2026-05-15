@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 dotenv.config({ path: "../../apps/server/.env" });
 
 import { drizzle } from "drizzle-orm/node-postgres";
+import { sql } from "drizzle-orm";
 import {
   costcoItemCategoryMap,
   spendingCategories,
@@ -20,7 +21,7 @@ await db
   .values(categoriesSeed)
   .onConflictDoUpdate({
     target: spendingCategories.id,
-    set: { name: spendingCategories.name, parentId: spendingCategories.parentId },
+    set: { name: sql`excluded.name`, parentId: sql`excluded.parent_id` },
   });
 
 console.log("Seeding Costco item category mappings...");
@@ -29,7 +30,10 @@ await db
   .values(mappingsSeed)
   .onConflictDoUpdate({
     target: costcoItemCategoryMap.itemNumber,
-    set: { categoryId: costcoItemCategoryMap.categoryId },
+    set: {
+      categoryId: sql`excluded.category_id`,
+      samedayProductId: sql`excluded.sameday_product_id`,
+    },
   });
 
 console.log("Seed complete.");

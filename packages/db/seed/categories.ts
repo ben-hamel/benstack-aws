@@ -68,7 +68,7 @@ export const mappingsSeed: ItemMapping[] = [
   { itemNumber: "4509", categoryId: 27 },
   { itemNumber: "4788", categoryId: 4 },
   { itemNumber: "5257", categoryId: 9 },
-  { itemNumber: "5276", categoryId: 2 },
+  { itemNumber: "5276", categoryId: 2, samedayProductId: "2008701" },
   { itemNumber: "5597", categoryId: 2 },
   { itemNumber: "5675", categoryId: 2 },
   { itemNumber: "5720", categoryId: 15 },

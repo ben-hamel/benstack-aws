@@ -44,6 +44,7 @@
     "dotenv": "catalog:",
     "drizzle-kit": "^0.31.10",
     "drizzle-orm": "^0.45.2",
+    "playwright": "^1.59.1",
     "zod": "catalog:"
   },
   "devDependencies": {
