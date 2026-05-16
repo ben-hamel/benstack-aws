@@ -58,7 +58,7 @@ resource "aws_lambda_function" "api" {
   function_name    = "benstack-api"
   role             = aws_iam_role.lambda_api.arn
   handler          = "index.handler"
-  runtime          = "nodejs20.x"
+  runtime          = "nodejs24.x"
   timeout          = 60
   memory_size      = 512
 

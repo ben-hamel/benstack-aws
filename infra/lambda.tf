@@ -17,7 +17,7 @@ resource "aws_lambda_function" "receipt_processor" {
   function_name    = "benstack-receipt-processor"
   role             = aws_iam_role.lambda_receipt_processor.arn
   handler          = "index.handler"
-  runtime          = "nodejs20.x"
+  runtime          = "nodejs24.x"
   timeout          = 300
   memory_size      = 512
 
@@ -53,7 +53,7 @@ resource "aws_lambda_function" "receipt_processor_serverless" {
   function_name    = "benstack-receipt-processor-serverless"
   role             = aws_iam_role.lambda_receipt_processor.arn
   handler          = "index.handler"
-  runtime          = "nodejs20.x"
+  runtime          = "nodejs24.x"
   timeout          = 300
   memory_size      = 512
 
