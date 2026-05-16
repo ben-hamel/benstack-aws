@@ -2,7 +2,7 @@ name: benstack-aws
 
 services:
   postgres:
-    image: postgres
+    image: postgres:17
     container_name: benstack-aws-postgres
     environment:
       POSTGRES_DB: benstack-aws
@@ -11,7 +11,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - benstack-aws_benstack-aws_postgres_data:/var/lib/postgresql
+      - postgres_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -19,7 +19,5 @@ services:
       retries: 5
     restart: unless-stopped
 
-
 volumes:
-  benstack-aws_benstack-aws_postgres_data:
-    external: true
+  postgres_data:

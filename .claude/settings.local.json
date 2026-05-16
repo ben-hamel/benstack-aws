@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /Users/ben/Developer/benstack-aws -name .env* -o -name env.example*)",
+      "Bash(wc -l /Users/ben/Developer/benstack-aws/apps/web/src/**/*.tsx /Users/ben/Developer/benstack-aws/apps/server/src/**/*.ts)",
+      "WebFetch(domain:developer.hashicorp.com)",
+      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")",
+      "WebFetch(domain:orm.drizzle.team)",
+      "WebFetch(domain:github.com)",
+      "Bash(chmod +x /Users/ben/Developer/benstack-aws/scripts/db-prod.sh)",
+      "WebFetch(domain:aws.amazon.com)",
+      "Bash(aws ec2 *)",
+      "Bash(aws logs *)",
+      "mcp__docs-langchain__search_docs_by_lang_chain",
+      "mcp__docs-langchain__query_docs_filesystem_docs_by_lang_chain",
+      "WebFetch(domain:docs.langchain.com)",
+      "WebFetch(domain:elements.ai-sdk.dev)",
+      "WebFetch(domain:pi.dev)",
+      "WebFetch(domain:www.anthropic.com)"
+    ]
+  }
+}
