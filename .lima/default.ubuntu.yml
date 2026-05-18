@@ -1,0 +1,81 @@
+# Lima VM for benstack-aws - Ubuntu (generic)
+#
+# Create VM (run from repo root):
+#   limactl create --name=benstack-aws --set ".mounts=[{\"location\": \"$PWD\", \"writable\": true}]" ./.lima/default.ubuntu.yml && limactl start benstack-aws
+# With dotfiles:
+#   limactl create --name=benstack-aws --set ".mounts=[{\"location\": \"$PWD\", \"writable\": true}, {\"location\": \"$HOME/dotfiles\", \"writable\": false, \"mountPoint\": \"$HOME/dotfiles\"}]" ./.lima/default.ubuntu.yml && limactl start benstack-aws
+# Setup:   limactl shell benstack-aws -- bash -c '~/install.sh'
+# SSH:     limactl shell benstack-aws
+# Stop:    limactl stop benstack-aws
+# Rebuild: limactl stop benstack-aws && limactl delete benstack-aws && limactl create --name=benstack-aws --set ".mounts=[{\"location\": \"$PWD\", \"writable\": true}]" ./.lima/default.ubuntu.yml && limactl start benstack-aws
+#
+# Default - https://github.com/lima-vm/lima/blob/master/templates/default.yaml
+
+minimumLimaVersion: "2.0.0"
+
+vmType: vz
+
+base:
+  - template:_images/ubuntu-lts
+
+cpus: 4
+memory: "8GiB"
+
+mounts: []
+
+
+containerd:
+  system: false
+  user: false
+
+provision:
+  - mode: data
+    path: "{{.Home}}/install.sh"
+    owner: "{{.User}}"
+    permissions: "755"
+    content: |
+      #!/bin/bash
+      set -eux -o pipefail
+
+      echo "Installing development environment..."
+      echo "This may take several minutes..."
+
+      # Install system packages
+      echo "Installing system packages..."
+      sudo apt update && sudo apt install -y \
+        net-tools
+
+      # Install mise
+      echo "Installing mise..."
+      curl https://mise.run | sh
+
+      # Add mise to PATH for this script
+      export PATH="$HOME/.local/bin:$PATH"
+
+      # Configure mise activation in .bashrc (for interactive shells)
+      if ! grep -q 'mise activate' ~/.bashrc; then
+        echo 'eval "$(~/.local/bin/mise activate bash)"' >> ~/.bashrc
+      fi
+
+      # Configure mise activation in .profile (for login/non-interactive shells)
+      if ! grep -q 'mise activate' ~/.profile; then
+        echo 'eval "$(~/.local/bin/mise activate bash)"' >> ~/.profile
+      fi
+      eval "$(~/.local/bin/mise activate bash)"
+
+      # Install Node.js via mise
+      echo "Installing Node.js..."
+      mise use --global node@24
+      mise install
+
+      # Install Claude Code
+      echo "Installing Claude Code..."
+      mise use -g npm:@anthropic-ai/claude-code@latest
+
+      # Activate project mise.toml if present
+      echo "Setting up project tools..."
+      mise trust
+      mise install
+
+      echo ""
+      echo "Installation complete! Restart your shell or run: source ~/.bashrc"

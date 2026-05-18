@@ -1,23 +1,12 @@
 # Development
 
-## Prerequisites
+## Dev environments
 
-- [Bun](https://bun.sh)
-- [AWS CLI](https://aws.amazon.com/cli/) — for deploying and accessing production resources
-- [AWS Session Manager Plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html) — required for production database access
+Pick whichever works best for you:
 
-```bash
-brew install awscli
-brew install --cask session-manager-plugin
-```
-
-## Getting Started
-
-First, install the dependencies:
-
-```bash
-bun install
-```
+- [Local](docs/local.md) — run directly on your host
+- [Lima VM](docs/lima.md) — lightweight VM via Lima (macOS only)
+- [Dev Container](docs/dev-container.md) — Docker-based container with VS Code Dev Containers
 
 ## Database Setup
 
@@ -25,21 +14,11 @@ This project uses PostgreSQL with Drizzle ORM.
 
 1. Make sure you have a PostgreSQL database set up.
 2. Update your `apps/server/.env` file with your PostgreSQL connection details.
-
-3. Apply the schema to your database:
+3. Apply the schema:
 
 ```bash
 bun run db:push
 ```
-
-Then, run the development server:
-
-```bash
-bun run dev
-```
-
-Open [http://localhost:5173](http://localhost:5173) in your browser to see the web application.
-The API is running at [http://localhost:3000](http://localhost:3000).
 
 ## UI Customization
 
