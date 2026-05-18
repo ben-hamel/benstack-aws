@@ -22,64 +22,15 @@ mounts:
   - location: "{{.Home}}/dotfiles"
     writable: false
 
+## killport forwarding for VS Code remote. Reenable if you want to work from terminal instead    
+portForwards:
+  - guestPortRange: [1, 65535]
+    ignore: true
+
+# turn of containerd since we use docker in the repo.TODO: Maybe looking to switching away.
 containerd:
   system: false
   user: false
-
-## Install script version
-# provision:
-#   - mode: data
-#     path: "{{.Home}}/install.sh"
-#     owner: "{{.User}}"
-#     permissions: "755"
-#     content: |
-#       #!/bin/bash
-# #
-#       echo "Installing development environment..."
-#       echo "This may take several minutes..."
-#
-#       # Install system packages
-#       # unzip is required for oh-my-posh installer
-#       echo "Installing system packages..."
-#       sudo apt update && sudo apt install -y \
-#         net-tools \
-#         stow \
-#         unzip
-#
-#       # Install mise
-#       echo "Installing mise..."
-#       curl https://mise.run | sh
-#
-#       # Add mise to PATH for this script
-#       export PATH="$HOME/.local/bin:$PATH"
-#
-#       # Configure mise activation in .bashrc (for interactive shells)
-#       if ! grep -q 'mise activate' ~/.bashrc; then
-#         echo 'eval "$(~/.local/bin/mise activate bash)"' >> ~/.bashrc
-#       fi
-#
-#       # Configure mise activation in .profile (for login/non-interactive shells)
-#       if ! grep -q 'mise activate' ~/.profile; then
-#         echo 'eval "$(~/.local/bin/mise activate bash)"' >> ~/.profile
-#       fi
-#       eval "$(~/.local/bin/mise activate bash)"
-#
-#       # Install Node.js via mise
-#       echo "Installing Node.js..."
-#       mise use --global node@24
-#       mise install
-#
-#       # Install Claude Code
-#       echo "Installing Claude Code..."
-#       mise use -g npm:@anthropic-ai/claude-code@latest
-#
-#       # Activate project mise.toml if present
-#       echo "Setting up project tools..."
-#       mise trust --yes
-#       mise install
-#
-#       echo ""
-#       echo "Installation complete! Restart your shell or run: source ~/.bashrc"
 
 provision:
   - mode: system
@@ -87,6 +38,23 @@ provision:
       #!/bin/bash
       set -eux -o pipefail
       apt -y update && apt -y install -y net-tools stow unzip
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      command -v docker >/dev/null 2>&1 && exit 0
+      export DEBIAN_FRONTEND=noninteractive
+      curl -fsSL https://get.docker.com | sh
+      systemctl disable --now docker.service docker.socket containerd.service containerd.socket || true
+      systemctl mask docker.service docker.socket containerd.service containerd.socket || true
+      apt-get install -y uidmap dbus-user-session
+  - mode: user
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      systemctl --user start dbus
+      dockerd-rootless-setuptool.sh install
+      docker context use rootless
   - mode: user
     script: |
       #!/bin/bash
@@ -114,6 +82,19 @@ provision:
       cd /Users/{{.User}}/Developer/benstack-aws && mise install
 
 probes:
+  - mode: readiness
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      if ! timeout 30s bash -c "until command -v docker >/dev/null 2>&1; do sleep 3; done"; then
+        echo >&2 "docker is not installed yet"
+        exit 1
+      fi
+      if ! timeout 30s bash -c "until pgrep rootlesskit; do sleep 3; done"; then
+        echo >&2 "rootlesskit (rootless docker) is not running"
+        exit 1
+      fi
+    hint: See "/var/log/cloud-init-output.log" in the guest
   - mode: readiness
     script: |
       #!/bin/bash
