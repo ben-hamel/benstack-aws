@@ -17,7 +17,7 @@ cpus: 4
 memory: "8GiB"
 
 mounts:
-  - location: "{{.Home}}/Developer/benstack-aws"
+  - location: "/Users/{{.User}}/Developer/benstack-aws"
     writable: true
   - location: "{{.Home}}/dotfiles"
     writable: false
@@ -26,6 +26,7 @@ containerd:
   system: false
   user: false
 
+## Install script version
 # provision:
 #   - mode: data
 #     path: "{{.Home}}/install.sh"
@@ -107,17 +108,17 @@ provision:
 
       eval "$(mise activate bash)"
 
-      mise use --global node@24
-      mise install
-      mise use -g npm:@anthropic-ai/claude-code@latest
-      mise settings set trusted_config_paths /Users/ben/Developer/benstack-aws
+      curl -fsSL https://claude.ai/install.sh | bash
+
+      mise trust /Users/{{.User}}/Developer/benstack-aws/mise.toml
+      cd /Users/{{.User}}/Developer/benstack-aws && mise install
 
 probes:
   - mode: readiness
     script: |
       #!/bin/bash
       set -eux -o pipefail
-      if ! timeout 180s bash -c "until command -v $HOME/.local/share/mise/shims/claude; do sleep 3; done"; then
+      if ! timeout 10s bash -c "until [ -f $HOME/.local/bin/claude ]; do sleep 3; done"; then
         echo >&2 "Claude Code is not installed yet"
         exit 1
       fi
