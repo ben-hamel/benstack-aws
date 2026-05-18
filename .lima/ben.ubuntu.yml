@@ -2,7 +2,6 @@
 #
 # Create VM (run from repo root):
 #   limactl create --name=benstack-aws ./.lima/ben.ubuntu.yml && limactl start benstack-aws
-# Setup:   limactl shell benstack-aws -- bash -c '~/install.sh'
 # SSH:     limactl shell benstack-aws
 # Stop:    limactl stop benstack-aws
 # Rebuild: limactl stop benstack-aws && limactl delete benstack-aws && limactl create --name=benstack-aws ./.lima/ben.ubuntu.yml && limactl start benstack-aws
@@ -27,57 +26,100 @@ containerd:
   system: false
   user: false
 
+# provision:
+#   - mode: data
+#     path: "{{.Home}}/install.sh"
+#     owner: "{{.User}}"
+#     permissions: "755"
+#     content: |
+#       #!/bin/bash
+# #
+#       echo "Installing development environment..."
+#       echo "This may take several minutes..."
+#
+#       # Install system packages
+#       # unzip is required for oh-my-posh installer
+#       echo "Installing system packages..."
+#       sudo apt update && sudo apt install -y \
+#         net-tools \
+#         stow \
+#         unzip
+#
+#       # Install mise
+#       echo "Installing mise..."
+#       curl https://mise.run | sh
+#
+#       # Add mise to PATH for this script
+#       export PATH="$HOME/.local/bin:$PATH"
+#
+#       # Configure mise activation in .bashrc (for interactive shells)
+#       if ! grep -q 'mise activate' ~/.bashrc; then
+#         echo 'eval "$(~/.local/bin/mise activate bash)"' >> ~/.bashrc
+#       fi
+#
+#       # Configure mise activation in .profile (for login/non-interactive shells)
+#       if ! grep -q 'mise activate' ~/.profile; then
+#         echo 'eval "$(~/.local/bin/mise activate bash)"' >> ~/.profile
+#       fi
+#       eval "$(~/.local/bin/mise activate bash)"
+#
+#       # Install Node.js via mise
+#       echo "Installing Node.js..."
+#       mise use --global node@24
+#       mise install
+#
+#       # Install Claude Code
+#       echo "Installing Claude Code..."
+#       mise use -g npm:@anthropic-ai/claude-code@latest
+#
+#       # Activate project mise.toml if present
+#       echo "Setting up project tools..."
+#       mise trust --yes
+#       mise install
+#
+#       echo ""
+#       echo "Installation complete! Restart your shell or run: source ~/.bashrc"
+
 provision:
-  - mode: data
-    path: "{{.Home}}/install.sh"
-    owner: "{{.User}}"
-    permissions: "755"
-    content: |
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      apt -y update && apt -y install -y net-tools stow unzip
+  - mode: user
+    script: |
       #!/bin/bash
       set -eux -o pipefail
 
-      echo "Installing development environment..."
-      echo "This may take several minutes..."
+      if ! command -v mise &>/dev/null; then
+        curl https://mise.run | sh
+      fi
 
-      # Install system packages
-      # unzip is required for oh-my-posh installer
-      echo "Installing system packages..."
-      sudo apt update && sudo apt install -y \
-        net-tools \
-        stow \
-        unzip
-
-      # Install mise
-      echo "Installing mise..."
-      curl https://mise.run | sh
-
-      # Add mise to PATH for this script
       export PATH="$HOME/.local/bin:$PATH"
 
-      # Configure mise activation in .bashrc (for interactive shells)
       if ! grep -q 'mise activate' ~/.bashrc; then
         echo 'eval "$(~/.local/bin/mise activate bash)"' >> ~/.bashrc
       fi
 
-      # Configure mise activation in .profile (for login/non-interactive shells)
       if ! grep -q 'mise activate' ~/.profile; then
         echo 'eval "$(~/.local/bin/mise activate bash)"' >> ~/.profile
       fi
-      eval "$(~/.local/bin/mise activate bash)"
 
-      # Install Node.js via mise
-      echo "Installing Node.js..."
+      eval "$(mise activate bash)"
+
       mise use --global node@24
       mise install
-
-      # Install Claude Code
-      echo "Installing Claude Code..."
       mise use -g npm:@anthropic-ai/claude-code@latest
+      mise settings set trusted_config_paths /Users/ben/Developer/benstack-aws
 
-      # Activate project mise.toml if present
-      echo "Setting up project tools..."
-      mise trust --yes
-      mise install
-
-      echo ""
-      echo "Installation complete! Restart your shell or run: source ~/.bashrc"
+probes:
+  - mode: readiness
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      if ! timeout 180s bash -c "until command -v $HOME/.local/share/mise/shims/claude; do sleep 3; done"; then
+        echo >&2 "Claude Code is not installed yet"
+        exit 1
+      fi
+    hint: |
+      Claude Code was not installed in the guest. Check "/var/log/cloud-init-output.log" in the guest for details.
