@@ -25,10 +25,11 @@ mounts:
   - location: "{{.Home}}/dotfiles"
     writable: false
 
-## killport forwarding for VS Code remote. Reenable if you want to work from terminal instead    
-portForwards:
-  - guestPortRange: [1, 65535]
-    ignore: true
+## killport forwarding for VS Code remote. Reenable if you want to work from terminal instead
+## You can stop pots from opening on vs code by editing the vs code settings too, see .vscode for eaxmples
+# portForwards:
+#   - guestPortRange: [1, 65535]
+#     ignore: true
 
 # turn of containerd since we use docker in the repo.TODO: Maybe looking to switching to containerd.
 containerd:
