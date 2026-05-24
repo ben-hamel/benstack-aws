@@ -8,6 +8,9 @@
 
 minimumLimaVersion: "2.0.0"
 
+user:
+  home: "/home/{{.User}}"
+
 vmType: vz
 
 base:
