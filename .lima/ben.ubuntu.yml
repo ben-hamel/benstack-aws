@@ -27,7 +27,7 @@ portForwards:
   - guestPortRange: [1, 65535]
     ignore: true
 
-# turn of containerd since we use docker in the repo.TODO: Maybe looking to switching away.
+# turn of containerd since we use docker in the repo.TODO: Maybe looking to switching to containerd.
 containerd:
   system: false
   user: false
