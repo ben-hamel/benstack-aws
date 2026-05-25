@@ -92,6 +92,7 @@ export const receiptItems = pgTable(
   (table) => [
     index("receipt_item_receipt_id_idx").on(table.receiptId),
     index("receipt_item_number_idx").on(table.itemNumber),
+    index("receipt_item_description_trgm_idx").using("gin", table.description.op("gin_trgm_ops")),
   ],
 );
 

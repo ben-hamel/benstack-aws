@@ -3,7 +3,7 @@ import { DefaultChatTransport } from "ai";
 import { useChat } from "@ai-sdk/react";
 import type { UIMessage } from "ai";
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { LoaderCircleIcon, MessageSquareIcon, MoreHorizontalIcon, PencilIcon, PlusIcon, SendIcon, Trash2Icon } from "lucide-react";
+import { LoaderCircleIcon, MessageSquareIcon, MoreHorizontalIcon, PencilIcon, PlusIcon, ReceiptTextIcon, SendIcon, SquareIcon, Trash2Icon } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { authClient } from "@/lib/auth-client";
@@ -17,7 +17,6 @@ import {
 import {
   Conversation,
   ConversationContent,
-  ConversationEmptyState,
   ConversationScrollButton,
 } from "@benstack-aws/ui/components/ai-elements/conversation";
 import {
@@ -32,13 +31,27 @@ import {
   ToolInput,
   ToolOutput,
 } from "@benstack-aws/ui/components/ai-elements/tool";
+import {
+  InlineCitation,
+  InlineCitationCard,
+  InlineCitationCardBody,
+  InlineCitationSource,
+} from "@benstack-aws/ui/components/ai-elements/inline-citation";
+import { Suggestion, Suggestions } from "@benstack-aws/ui/components/ai-elements/suggestion";
+import { HoverCardTrigger } from "@benstack-aws/ui/components/hover-card";
+import { Badge } from "@benstack-aws/ui/components/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@benstack-aws/ui/components/dialog";
 
 const TOOL_TITLES: Record<string, string> = {
   get_spending_summary: "Spending Summary",
   search_items: "Search Items",
   get_top_items: "Top Items",
-  get_recent_receipts: "Recent Receipts",
-  get_first_receipt: "First Receipt",
+  get_receipts: "Receipts",
 };
 
 export const Route = createFileRoute("/chat")({
@@ -55,6 +68,28 @@ const SERVER_URL = env.VITE_SERVER_URL;
 
 type ChatRecord = { id: string; title: string | null; createdAt: string; updatedAt: string };
 type MessageRecord = { role: "user" | "assistant"; content: string };
+
+type ReceiptRow = { id: string; date: string; store: string | null; city: string | null; total: string; savings: string | null };
+
+type ReceiptDetail = ReceiptRow & {
+  subtotal: string | null;
+  instantSavings: string | null;
+  receiptType: "warehouse" | "gas_station";
+  items: { id: string; type: string; description: string; amount: string; quantity: number; taxFlag: string | null; fuelQuantityLitres: string | null; fuelPricePerLitre: string | null }[];
+  tenders: { id: string; description: string | null; cardLast4: string | null; amount: string }[];
+  taxes: { id: string; legend: string; percent: string; amount: string }[];
+};
+
+function formatCurrency(val: string | null) {
+  if (!val) return "$0.00";
+  const num = Number.parseFloat(val);
+  return num < 0 ? `-$${Math.abs(num).toFixed(2)}` : `$${num.toFixed(2)}`;
+}
+
+function formatReceiptDate(dateStr: string) {
+  const [year, month, day] = dateStr.split("-");
+  return `${month}/${day}/${year}`;
+}
 
 function toUIMessages(records: MessageRecord[]): UIMessage[] {
   return records.map((m) => ({
@@ -303,9 +338,6 @@ function RouteComponent() {
               {activeChat?.title ?? (activeChatId ? "New conversation" : "Receipt Chat")}
             </h1>
           </div>
-          <p className="text-sm text-muted-foreground">
-            Ask about spending, receipts, and purchased items.
-          </p>
         </div>
 
         <div className="flex-1 overflow-hidden">
@@ -346,8 +378,9 @@ function ChatSession({
 }) {
   const [draft, setDraft] = useState("");
   const prevStatus = useRef<string>("ready");
+  const formRef = useRef<HTMLFormElement>(null);
 
-  const { messages, sendMessage, status, error } = useChat({
+  const { messages, sendMessage, stop, status, error } = useChat({
     id: chatId,
     messages: initialMessages,
     transport: new DefaultChatTransport({
@@ -375,20 +408,16 @@ function ChatSession({
   return (
     <div className="grid h-full grid-rows-[1fr_auto]">
       <Conversation>
-        <ConversationContent>
+        <ConversationContent className="mx-auto w-full max-w-3xl">
           {error && (
             <div className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {error.message}
             </div>
           )}
 
-          {messages.length === 0 ? (
-            <ConversationEmptyState
-              title="Ask about your receipts"
-              description='Try "How much did I spend this month?"'
-            />
-          ) : (
-            messages.map((message) => (
+          {messages.length > 0 && (
+            <>
+            {messages.map((message) => (
               <div key={message.id} className="space-y-2">
                 {message.parts.map((part, index) => {
                   if (part.type === "text") {
@@ -403,34 +432,63 @@ function ChatSession({
 
                   if (part.type === "dynamic-tool") {
                     return (
-                      <Tool
-                        key={`${message.id}-${index}`}
-                        defaultOpen={part.state === "output-available" || part.state === "output-error"}
-                      >
-                        <ToolHeader
-                          type="dynamic-tool"
-                          state={part.state}
-                          toolName={part.toolName}
-                          title={TOOL_TITLES[part.toolName] ?? part.toolName}
-                        />
-                        <ToolContent>
-                          <ToolInput input={part.input} />
-                          <ToolOutput output={part.output} errorText={part.errorText} />
-                        </ToolContent>
-                      </Tool>
+                      <div key={`${message.id}-${index}`} className="space-y-2">
+                        <Tool
+                          defaultOpen={part.state === "output-available" || part.state === "output-error"}
+                        >
+                          <ToolHeader
+                            type="dynamic-tool"
+                            state={part.state}
+                            toolName={part.toolName}
+                            title={TOOL_TITLES[part.toolName] ?? part.toolName}
+                          />
+                          <ToolContent>
+                            <ToolInput input={part.input} />
+                            <ToolOutput output={part.output} errorText={part.errorText} />
+                          </ToolContent>
+                        </Tool>
+                        {part.toolName === "get_receipts" && !!part.output && (
+                          <ReceiptChips output={part.output} />
+                        )}
+                      </div>
                     );
                   }
 
                   return null;
                 })}
               </div>
-            ))
+            ))}
+            {status === "submitted" && <ThinkingIndicator />}
+            </>
           )}
         </ConversationContent>
         <ConversationScrollButton />
       </Conversation>
 
-      <form className="border-t px-4 py-3" onSubmit={handleSubmit}>
+      <div className="mx-auto w-full max-w-3xl px-4 py-3">
+        {messages.length === 0 && (
+          <div className="mb-3 overflow-hidden">
+            <Suggestions>
+              {[
+                "What was my most expensive trip?",
+                "How much did I spend this month?",
+                "What do I buy most often?",
+                "Show me my recent receipts",
+                "How much have I saved in total?",
+              ].map((s) => (
+                <Suggestion
+                  key={s}
+                  suggestion={s}
+                  onClick={(text) => {
+                    setDraft(text);
+                    setTimeout(() => formRef.current?.requestSubmit(), 0);
+                  }}
+                />
+              ))}
+            </Suggestions>
+          </div>
+        )}
+        <form ref={formRef} onSubmit={handleSubmit}>
         <div className="flex items-end gap-2 rounded-lg border bg-card p-3">
           <textarea
             className="min-h-20 flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground"
@@ -446,19 +504,202 @@ function ChatSession({
             }}
             disabled={status !== "ready"}
           />
-          <button
-            type="submit"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-md border disabled:opacity-50"
-            disabled={!draft.trim() || status !== "ready"}
-          >
-            {status === "submitted" || status === "streaming" ? (
-              <LoaderCircleIcon className="h-4 w-4 animate-spin" />
-            ) : (
+          {status === "submitted" || status === "streaming" ? (
+            <button
+              type="button"
+              onClick={stop}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-md border"
+            >
+              <SquareIcon className="h-4 w-4" />
+            </button>
+          ) : (
+            <button
+              type="submit"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-md border disabled:opacity-50"
+              disabled={!draft.trim()}
+            >
               <SendIcon className="h-4 w-4" />
-            )}
-          </button>
+            </button>
+          )}
         </div>
       </form>
+      </div>
     </div>
+  );
+}
+
+function ThinkingIndicator() {
+  return (
+    <>
+      <style>{`
+        @keyframes circle-breathe {
+          0%, 100% { transform: scale(0.6); }
+          50% { transform: scale(1.2); }
+        }
+      `}</style>
+      <span
+        className="block h-3 w-3 rounded-full bg-muted-foreground"
+        style={{ animation: "circle-breathe 1.2s ease-in-out infinite" }}
+      />
+    </>
+  );
+}
+
+function ReceiptChips({ output }: { output: unknown }) {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  let rows: ReceiptRow[] = [];
+  try {
+    const parsed = typeof output === "string" ? JSON.parse(output) : output;
+    if (Array.isArray(parsed)) rows = parsed.filter((r): r is ReceiptRow => !!r.id);
+  } catch {
+    return null;
+  }
+
+  if (rows.length === 0) return null;
+
+  return (
+    <>
+      <div className="flex flex-wrap gap-2 pb-2">
+        {rows.map((row) => (
+          <InlineCitation key={row.id}>
+            <InlineCitationCard>
+              <HoverCardTrigger>
+                <Badge
+                  variant="secondary"
+                  className="cursor-pointer gap-1 rounded-full"
+                  onClick={() => setSelectedId(row.id)}
+                >
+                  <ReceiptTextIcon className="h-3 w-3" />
+                  {row.store ?? "Unknown"} · {formatReceiptDate(row.date)} · {formatCurrency(row.total)}
+                </Badge>
+              </HoverCardTrigger>
+              <InlineCitationCardBody>
+                <div className="p-4">
+                  <InlineCitationSource
+                    title={`${row.store ?? "Unknown Store"}${row.city ? `, ${row.city}` : ""}`}
+                    description={`${formatReceiptDate(row.date)} · ${formatCurrency(row.total)}${row.savings && Number.parseFloat(row.savings) > 0 ? ` · Saved ${formatCurrency(row.savings)}` : ""}`}
+                  />
+                  <button
+                    type="button"
+                    className="mt-3 text-xs text-primary hover:underline"
+                    onClick={() => setSelectedId(row.id)}
+                  >
+                    View full receipt →
+                  </button>
+                </div>
+              </InlineCitationCardBody>
+            </InlineCitationCard>
+          </InlineCitation>
+        ))}
+      </div>
+
+      {selectedId && (
+        <ReceiptDetailDialog
+          receiptId={selectedId}
+          open={!!selectedId}
+          onClose={() => setSelectedId(null)}
+        />
+      )}
+    </>
+  );
+}
+
+function ReceiptDetailDialog({
+  receiptId,
+  open,
+  onClose,
+}: {
+  receiptId: string;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const { data: detail, isLoading } = useQuery<ReceiptDetail>({
+    queryKey: ["receipts", receiptId],
+    queryFn: async () => {
+      const res = await fetch(`${SERVER_URL}/api/receipts/${receiptId}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch receipt");
+      return res.json();
+    },
+    enabled: open,
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>
+            {detail ? `${detail.store ?? "Receipt"}${detail.city ? `, ${detail.city}` : ""}` : "Receipt"}
+          </DialogTitle>
+        </DialogHeader>
+
+        {isLoading ? (
+          <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+            <LoaderCircleIcon className="h-4 w-4 animate-spin" />
+            Loading...
+          </div>
+        ) : detail ? (
+          <div className="space-y-4 text-sm">
+            <p className="text-muted-foreground">{formatDate(detail.date)}</p>
+
+            <div>
+              <h4 className="mb-2 text-xs font-medium uppercase text-muted-foreground">Items</h4>
+              <div className="space-y-1">
+                {detail.items
+                  .filter((i) => i.type === "item" || i.type === "fuel")
+                  .map((item) => (
+                    <div key={item.id} className="flex justify-between">
+                      <span className="truncate flex-1 min-w-0">
+                        {item.description}
+                        {item.quantity !== 1 && <span className="text-muted-foreground ml-1">x{item.quantity}</span>}
+                      </span>
+                      <span className="tabular-nums ml-2">{formatCurrency(item.amount)}</span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+
+            <div className="border-t pt-3 space-y-1">
+              {detail.subtotal && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Subtotal</span>
+                  <span className="tabular-nums">{formatCurrency(detail.subtotal)}</span>
+                </div>
+              )}
+              {detail.taxes.map((tax) => (
+                <div key={tax.id} className="flex justify-between">
+                  <span className="text-muted-foreground">{tax.legend} ({tax.percent}%)</span>
+                  <span className="tabular-nums">{formatCurrency(tax.amount)}</span>
+                </div>
+              ))}
+              {detail.instantSavings && Number.parseFloat(detail.instantSavings) > 0 && (
+                <div className="flex justify-between text-green-600 dark:text-green-400">
+                  <span>Instant Savings</span>
+                  <span className="tabular-nums">-${Number.parseFloat(detail.instantSavings).toFixed(2)}</span>
+                </div>
+              )}
+              <div className="flex justify-between font-semibold">
+                <span>Total</span>
+                <span className="tabular-nums">{formatCurrency(detail.total)}</span>
+              </div>
+            </div>
+
+            {detail.tenders.length > 0 && (
+              <div className="border-t pt-3 space-y-1">
+                <h4 className="mb-2 text-xs font-medium uppercase text-muted-foreground">Payment</h4>
+                {detail.tenders.map((t) => (
+                  <div key={t.id} className="flex justify-between">
+                    <span className="text-muted-foreground">{t.description ?? "Card"}{t.cardLast4 && ` ••••${t.cardLast4}`}</span>
+                    <span className="tabular-nums">{formatCurrency(t.amount)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-sm text-destructive">Failed to load receipt.</p>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

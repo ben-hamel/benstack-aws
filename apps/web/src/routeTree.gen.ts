@@ -9,12 +9,18 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as ReceiptsUploadRouteImport } from './routes/receipts-upload'
 import { Route as ReceiptsRouteImport } from './routes/receipts'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ChatRouteImport } from './routes/chat'
 import { Route as IndexRouteImport } from './routes/index'
 
+const ReceiptsUploadRoute = ReceiptsUploadRouteImport.update({
+  id: '/receipts-upload',
+  path: '/receipts-upload',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ReceiptsRoute = ReceiptsRouteImport.update({
   id: '/receipts',
   path: '/receipts',
@@ -47,6 +53,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
   '/receipts': typeof ReceiptsRoute
+  '/receipts-upload': typeof ReceiptsUploadRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -54,6 +61,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
   '/receipts': typeof ReceiptsRoute
+  '/receipts-upload': typeof ReceiptsUploadRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -62,13 +70,27 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
   '/receipts': typeof ReceiptsRoute
+  '/receipts-upload': typeof ReceiptsUploadRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/chat' | '/dashboard' | '/login' | '/receipts'
+  fullPaths:
+    | '/'
+    | '/chat'
+    | '/dashboard'
+    | '/login'
+    | '/receipts'
+    | '/receipts-upload'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/chat' | '/dashboard' | '/login' | '/receipts'
-  id: '__root__' | '/' | '/chat' | '/dashboard' | '/login' | '/receipts'
+  to: '/' | '/chat' | '/dashboard' | '/login' | '/receipts' | '/receipts-upload'
+  id:
+    | '__root__'
+    | '/'
+    | '/chat'
+    | '/dashboard'
+    | '/login'
+    | '/receipts'
+    | '/receipts-upload'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -77,10 +99,18 @@ export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRoute
   LoginRoute: typeof LoginRoute
   ReceiptsRoute: typeof ReceiptsRoute
+  ReceiptsUploadRoute: typeof ReceiptsUploadRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/receipts-upload': {
+      id: '/receipts-upload'
+      path: '/receipts-upload'
+      fullPath: '/receipts-upload'
+      preLoaderRoute: typeof ReceiptsUploadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/receipts': {
       id: '/receipts'
       path: '/receipts'
@@ -125,6 +155,7 @@ const rootRouteChildren: RootRouteChildren = {
   DashboardRoute: DashboardRoute,
   LoginRoute: LoginRoute,
   ReceiptsRoute: ReceiptsRoute,
+  ReceiptsUploadRoute: ReceiptsUploadRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

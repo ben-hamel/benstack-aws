@@ -9,7 +9,7 @@ import { and, count, gte, ilike, lte, or, sql, sum } from "drizzle-orm";
 import { createAgent, tool, type ToolRuntime } from "langchain";
 import { z } from "zod";
 
-const model = new ChatAnthropic({ model: "claude-haiku-4-5-20251001" });
+const model = new ChatAnthropic({ model: "claude-sonnet-4-6" });
 const titleModel = new ChatAnthropic({ model: "claude-haiku-4-5-20251001", maxTokens: 20 });
 
 export const store = PostgresStore.fromConnString(env.DATABASE_URL, {
@@ -57,22 +57,77 @@ function buildTools() {
     },
   );
 
-  const searchItems = tool(
-    async ({ keywords, startDate, endDate, limit }, runtime: ToolRuntime<unknown, ChatContext>) => {
+  const listCategories = tool(
+    async () => {
+      const categories = await db
+        .select({
+          id: spendingCategories.id,
+          name: spendingCategories.name,
+          parentId: spendingCategories.parentId,
+        })
+        .from(spendingCategories)
+        .orderBy(spendingCategories.parentId, spendingCategories.name);
+
+      return JSON.stringify(categories);
+    },
+    {
+      name: "list_categories",
+      description:
+        "Returns all spending categories with their IDs and parent relationships. Call this first when the user asks about categories or when you need category IDs for get_items filters.",
+      schema: z.object({}),
+    },
+  );
+
+  const getItems = tool(
+    async ({ keywords, includeCategoryIds, excludeCategoryIds, startDate, endDate, limit }, runtime: ToolRuntime<unknown, ChatContext>) => {
       const { orgId } = runtime.context;
-      const keywordConditions = keywords.map((kw: string) =>
-        ilike(receiptItems.description, `%${kw}%`),
-      );
-      const conditions = [
+
+      const conditions: ReturnType<typeof eq>[] = [
         eq(receipts.organizationId, orgId),
-        or(...keywordConditions),
+        eq(receiptItems.type, "item"),
       ];
-      if (startDate) conditions.push(gte(receipts.transactionDate, startDate));
-      if (endDate) conditions.push(lte(receipts.transactionDate, endDate));
+
+      if (keywords && keywords.length > 0) {
+        conditions.push(
+          or(...keywords.map((kw: string) =>
+            sql`word_similarity(${kw}, ${receiptItems.description}) > 0.3`,
+          )) as ReturnType<typeof eq>,
+        );
+      }
+
+      if (startDate) conditions.push(gte(receipts.transactionDate, startDate) as ReturnType<typeof eq>);
+      if (endDate) conditions.push(lte(receipts.transactionDate, endDate) as ReturnType<typeof eq>);
+
+      if (includeCategoryIds && includeCategoryIds.length > 0) {
+        const mappedItems = await db
+          .select({ itemNumber: costcoItemCategoryMap.itemNumber })
+          .from(costcoItemCategoryMap)
+          .where(or(...includeCategoryIds.map((id: number) => eq(costcoItemCategoryMap.categoryId, id))));
+        const itemNumbers = mappedItems.map((i) => i.itemNumber);
+        if (itemNumbers.length > 0) {
+          conditions.push(or(...itemNumbers.map((n) => eq(receiptItems.itemNumber, n))) as ReturnType<typeof eq>);
+        } else {
+          return JSON.stringify([]);
+        }
+      }
+
+      if (excludeCategoryIds && excludeCategoryIds.length > 0) {
+        const mappedItems = await db
+          .select({ itemNumber: costcoItemCategoryMap.itemNumber })
+          .from(costcoItemCategoryMap)
+          .where(or(...excludeCategoryIds.map((id: number) => eq(costcoItemCategoryMap.categoryId, id))));
+        const itemNumbers = mappedItems.map((i) => i.itemNumber);
+        if (itemNumbers.length > 0) {
+          conditions.push(
+            sql`(${receiptItems.itemNumber} IS NULL OR ${receiptItems.itemNumber} NOT IN (${sql.join(itemNumbers.map((n) => sql`${n}`), sql`, `)}))` as ReturnType<typeof eq>,
+          );
+        }
+      }
 
       const rows = await db
         .select({
           description: receiptItems.description,
+          itemNumber: receiptItems.itemNumber,
           amount: receiptItems.amount,
           quantity: receiptItems.quantity,
           date: receipts.transactionDate,
@@ -82,21 +137,21 @@ function buildTools() {
         .innerJoin(receipts, eq(receiptItems.receiptId, receipts.id))
         .where(and(...conditions))
         .orderBy(desc(receipts.transactionDate))
-        .limit(limit ?? 20);
+        .limit(limit ?? 50);
 
       return JSON.stringify(rows);
     },
     {
-      name: "search_items",
+      name: "get_items",
       description:
-        "Search receipt line items by one or more description keywords (OR'd together). Think of all synonyms and related product name fragments the user might mean and pass them all. For example, for 'beverages' pass ['water', 'juice', 'soda', 'coffee', 'tea', 'drink']. Returns matching items with date, store, and amount.",
+        "Flexible receipt line item search. Supports fuzzy keyword matching (handles Costco abbreviations like 'MATTRS' when searching 'mattress'), category include/exclude filters, and date ranges. Use list_categories first to get category IDs. Pass excludeCategoryIds with all Grocery subcategory IDs to get non-grocery items. No filters returns all items.",
       schema: z.object({
-        keywords: z
-          .array(z.string())
-          .describe("One or more keywords to search in item descriptions (OR'd). Include synonyms and related terms."),
+        keywords: z.array(z.string()).optional().describe("Fuzzy keywords to match against item descriptions. Handles abbreviations automatically."),
+        includeCategoryIds: z.array(z.number()).optional().describe("Only return items belonging to these category IDs."),
+        excludeCategoryIds: z.array(z.number()).optional().describe("Exclude items belonging to these category IDs. Items with no category mapping are always included."),
         startDate: z.string().optional().describe("Start date YYYY-MM-DD"),
         endDate: z.string().optional().describe("End date YYYY-MM-DD"),
-        limit: z.number().optional().describe("Max results, default 20"),
+        limit: z.number().optional().describe("Max results, default 50"),
       }),
     },
   );
@@ -150,11 +205,19 @@ function buildTools() {
     },
   );
 
-  const recentReceipts = tool(
-    async ({ limit }, runtime: ToolRuntime<unknown, ChatContext>) => {
+  const getReceipts = tool(
+    async ({ sortBy, sortOrder, limit, startDate, endDate }, runtime: ToolRuntime<unknown, ChatContext>) => {
       const { orgId } = runtime.context;
+      const conditions = [eq(receipts.organizationId, orgId)];
+      if (startDate) conditions.push(gte(receipts.transactionDate, startDate));
+      if (endDate) conditions.push(lte(receipts.transactionDate, endDate));
+
+      const orderCol = sortBy === "total" ? receipts.total : receipts.transactionDate;
+      const order = sortOrder === "asc" ? orderCol : desc(orderCol);
+
       const rows = await db
         .select({
+          id: receipts.id,
           date: receipts.transactionDate,
           store: receipts.storeName,
           city: receipts.storeCity,
@@ -162,21 +225,22 @@ function buildTools() {
           savings: receipts.instantSavings,
         })
         .from(receipts)
-        .where(eq(receipts.organizationId, orgId))
-        .orderBy(desc(receipts.transactionDate))
+        .where(and(...conditions))
+        .orderBy(order)
         .limit(limit ?? 10);
 
       return JSON.stringify(rows);
     },
     {
-      name: "get_recent_receipts",
+      name: "get_receipts",
       description:
-        "Get the most recent receipts with date, store, city, total, and savings.",
+        "Get receipts with flexible sorting and filtering. Use sortBy='total' desc for most expensive, sortBy='date' desc for most recent, sortBy='date' asc for earliest. Supports optional date range filtering.",
       schema: z.object({
-        limit: z
-          .number()
-          .optional()
-          .describe("Number of receipts to return, default 10"),
+        sortBy: z.enum(["date", "total"]).optional().describe("Sort by date (default) or total amount"),
+        sortOrder: z.enum(["asc", "desc"]).optional().describe("Sort direction, default desc"),
+        limit: z.number().optional().describe("Number of receipts to return, default 10"),
+        startDate: z.string().optional().describe("Start date YYYY-MM-DD"),
+        endDate: z.string().optional().describe("End date YYYY-MM-DD"),
       }),
     },
   );
@@ -262,33 +326,7 @@ function buildTools() {
     },
   );
 
-  const firstReceipt = tool(
-    async (_args, runtime: ToolRuntime<unknown, ChatContext>) => {
-      const { orgId } = runtime.context;
-      const [row] = await db
-        .select({
-          date: receipts.transactionDate,
-          store: receipts.storeName,
-          city: receipts.storeCity,
-          total: receipts.total,
-          savings: receipts.instantSavings,
-        })
-        .from(receipts)
-        .where(eq(receipts.organizationId, orgId))
-        .orderBy(receipts.transactionDate)
-        .limit(1);
-
-      return JSON.stringify(row ?? {});
-    },
-    {
-      name: "get_first_receipt",
-      description:
-        "Get the earliest recorded receipt with date, store, city, total, and savings.",
-      schema: z.object({}),
-    },
-  );
-
-  return [spendingSummary, searchItems, spendingByCategory, topItems, recentReceipts, firstReceipt];
+  return [spendingSummary, listCategories, getItems, spendingByCategory, topItems, getReceipts];
 }
 
 export async function createChatStream(
@@ -311,7 +349,13 @@ You have access to tools that query receipts, line items, spending totals, and p
 Always answer clearly and concisely. Format dollar amounts with a $ sign and 2 decimal places.
 Use human-readable dates like "March 15, 2024". Never mention tool names, function calls, internal system behavior, or backend limitations to the user.
 If you cannot answer from the available records, say so plainly and ask a natural follow-up only if it helps.
-Today's date is ${today}.`,
+Today's date is ${today}.
+
+When searching for items by keyword, Costco receipt descriptions are often abbreviated or use model numbers rather than full product names. Always expand your keyword list to cover likely variants:
+- Gaming consoles: "PlayStation" → also try "PS5", "PS4", "PS3"; "Xbox" → also "XBX", "Series X"; "Nintendo Switch" → also "NSW", "SWITCH"
+- Brands are often truncated: "mattress" → also "MATTRS"; "television" → also "TV", "TVSN"
+- Use both the full name and the abbreviation/model number in the same keywords array so a single tool call covers all variants.
+If a search returns no results, reason about alternative abbreviations or model numbers and retry before concluding the item was never purchased.`,
   });
 
   return agent.stream(

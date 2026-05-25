@@ -8,6 +8,7 @@ export default function Header() {
     { to: "/", label: "Home" },
     { to: "/dashboard", label: "Dashboard" },
     { to: "/receipts", label: "Receipts" },
+    { to: "/receipts-upload", label: "Upload (dev)" },
     { to: "/chat", label: "Chat" },
   ] as const;
 
@@ -17,7 +18,7 @@ export default function Header() {
         <nav className="flex gap-4 text-lg">
           {links.map(({ to, label }) => {
             return (
-              <Link key={to} to={to}>
+              <Link key={to} to={to} className="cursor-pointer">
                 {label}
               </Link>
             );
