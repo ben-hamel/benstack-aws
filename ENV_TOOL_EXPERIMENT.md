@@ -1,31 +1,55 @@
 # Varlock local environment experiment
 
-This branch replaces `apps/server/.env` for local backend development. Values
-are read from hidden custom fields on the Bitwarden Password Manager item
-`benstack-aws development`.
+This branch replaces plaintext local backend variables with values fetched from
+Bitwarden Secrets Manager. It does not grant the application access to the
+personal Bitwarden Password Manager vault.
 
-## Tomorrow: authenticate and test
+## Bitwarden layout
 
-Varlock 1.17.1 and the Bitwarden plugin 2.0.1 are installed as backend
-development dependencies. Install the official Bitwarden CLI, then log in once:
+- Organization: `Hamel Tech`
+- Project: `Benstack AWS Development`
+- Machine account: `Benstack AWS Local`
+- Permission: `Can read` on `Benstack AWS Development`
+- Access tokens: one separately revocable token per development machine
 
-```sh
-cd apps/server
-bw login
+The committed `apps/server/.env.schema` references each Secrets Manager secret
+by UUID. Those identifiers are safe to commit; secret values are not.
+
+## Set up a development machine
+
+Create a unique access token under the `Benstack AWS Local` machine account.
+Name it after the device so it can be revoked independently.
+
+Create the ignored `apps/server/.env.local` yourself with this placeholder:
+
+```dotenv
+BITWARDEN_ACCESS_TOKEN=varlock(prompt)
 ```
 
-From `apps/server`, validate the configuration. The first load will prompt to
-unlock Bitwarden:
+From the repository root, validate the configuration:
 
 ```sh
-varlock load
+bun secrets:init
 ```
 
-Start the backend without creating an `.env` file:
+Paste the access token only into Varlock's hidden prompt. Varlock replaces the
+placeholder with a locally encrypted value. The token is typed as
+`bitwardenAccessToken`, which is internal by default and is not injected into
+the application.
+
+After setup, start the entire monorepo normally from its root:
 
 ```sh
-varlock run -- bun run dev
+bun dev
 ```
 
-No Bitwarden values should be printed or committed. The original worktree and
-its ignored `apps/server/.env` are not modified by this experiment.
+The Bitwarden Password Manager CLI is not required for this setup. No raw token
+or secret value should be printed, committed, or passed on a command line.
+
+## Production boundary
+
+The backend development script explicitly runs through Varlock. Production
+builds do not load the Bitwarden-backed schema, and no Bitwarden machine token
+is provided to CI, ECS, or Lambda. AWS supplies production configuration from
+SSM Parameter Store using IAM roles, and the application's runtime environment
+schema continues to validate those injected values.

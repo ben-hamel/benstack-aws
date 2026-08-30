@@ -8,12 +8,44 @@ Pick whichever works best for you:
 - [Lima VM](docs/lima.md) — lightweight VM via Lima (macOS only)
 - [Dev Container](docs/dev-container.md) — Docker-based container with VS Code Dev Containers
 
+## Local secrets
+
+Backend development secrets are stored in the Bitwarden Secrets Manager project
+`Benstack AWS Development` and loaded through Varlock. Each development machine
+should use its own access token so that access can be revoked per device.
+
+1. In Bitwarden Secrets Manager, create an access token for the machine account
+   `Benstack AWS Local`. Give the token a name that identifies this device.
+2. Create the ignored file `apps/server/.env.local` with this placeholder:
+
+   ```dotenv
+   BITWARDEN_ACCESS_TOKEN=varlock(prompt)
+   ```
+
+3. From the repository root, initialize the token:
+
+   ```bash
+   bun secrets:init
+   ```
+
+4. Paste the access token into Varlock's hidden prompt. Varlock replaces the
+   placeholder with a device-encrypted value; do not paste the plaintext token
+   directly into the file.
+
+After this one-time setup, start the monorepo normally from its root with
+`bun dev`. Application secrets are fetched from the assigned Bitwarden project;
+the machine token does not grant access to the personal Password Manager vault.
+
+Varlock and Bitwarden are used only for local backend development. Production
+builds do not load the Bitwarden-backed schema. In AWS, ECS and Lambda receive
+their configuration from SSM Parameter Store through IAM-scoped infrastructure.
+
 ## Database Setup
 
 This project uses PostgreSQL with Drizzle ORM.
 
 1. Make sure you have a PostgreSQL database set up.
-2. Update your `apps/server/.env` file with your PostgreSQL connection details.
+2. Add the database connection secret to the Bitwarden Secrets Manager project.
 3. Apply the schema:
 
 ```bash

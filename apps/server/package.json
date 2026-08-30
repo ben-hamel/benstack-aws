@@ -7,7 +7,8 @@
     "build:lambda": "bun build src/lambda.ts --outfile dist/lambda/index.mjs --target node --bundle --format esm",
     "check-types": "tsc -b",
     "compile": "bun build --compile --minify --sourcemap --bytecode ./src/index.ts --outfile server",
-    "dev": "bun run --hot src/index.ts",
+    "dev": "varlock run -- bun run --hot src/index.ts",
+    "secrets:init": "varlock load",
     "start": "bun run dist/index.mjs"
   },
   "dependencies": {

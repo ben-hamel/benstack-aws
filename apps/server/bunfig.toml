@@ -1,4 +1,3 @@
-# Let Varlock resolve and validate the backend environment before Bun starts it.
-# This file is app-local, so the web app and other workspace packages are unaffected.
+# Varlock owns local env loading when invoked by the development script.
+# Production receives environment variables from AWS instead.
 env = false
-preload = ["varlock/auto-load"]
