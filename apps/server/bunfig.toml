@@ -1,0 +1,4 @@
+# Let Varlock resolve and validate the backend environment before Bun starts it.
+# This file is app-local, so the web app and other workspace packages are unaffected.
+env = false
+preload = ["varlock/auto-load"]

@@ -31,7 +31,9 @@
   "devDependencies": {
     "@benstack-aws/config": "workspace:*",
     "@types/bun": "catalog:",
+    "@varlock/bitwarden-plugin": "^2.0.1",
     "tsdown": "^0.16.5",
-    "typescript": "^5"
+    "typescript": "^5",
+    "varlock": "^1.17.1"
   }
 }

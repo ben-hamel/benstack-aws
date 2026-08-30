@@ -4,11 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite dev",
-    "build": "vite build",
+    "dev": "varlock run -- vite dev",
+    "build": "varlock run -- vite build",
     "serve": "vite preview",
-    "start": "vite",
-    "check-types": "vite build && tsc --noEmit"
+    "start": "varlock run -- vite",
+    "check-types": "bun run build && tsc --noEmit"
   },
   "dependencies": {
     "@ai-sdk/react": "^3.0.170",
@@ -41,6 +41,7 @@
     "postcss": "^8.5.3",
     "tailwindcss": "catalog:",
     "typescript": "^5",
+    "varlock": "^1.17.1",
     "vite": "^6.2.2"
   }
 }
