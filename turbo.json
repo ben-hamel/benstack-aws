@@ -17,6 +17,11 @@
       "cache": false,
       "persistent": true
     },
+    "server#dev": {
+      "cache": false,
+      "persistent": true,
+      "passThroughEnv": ["BWS_ACCESS_TOKEN"]
+    },
     "db:push": {
       "cache": false
     },

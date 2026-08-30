@@ -7,7 +7,7 @@
     "build:lambda": "bun build src/lambda.ts --outfile dist/lambda/index.mjs --target node --bundle --format esm",
     "check-types": "tsc -b",
     "compile": "bun build --compile --minify --sourcemap --bytecode ./src/index.ts --outfile server",
-    "dev": "bun run --hot src/index.ts",
+    "dev": "secretspec run --profile development -- bun run --hot src/index.ts",
     "start": "bun run dist/index.mjs"
   },
   "dependencies": {
