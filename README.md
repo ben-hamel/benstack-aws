@@ -179,3 +179,23 @@ A planned conversational interface for querying your purchase history using an L
 ## Development
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for setup instructions, available scripts, and UI customization.
+
+## Terraform state
+
+Terraform state is stored remotely in the private, versioned S3 bucket
+`benstack-terraform-state-989459974685`. S3 native state locking is enabled.
+Terraform 1.10 or newer is required.
+
+To use Terraform from a fresh clone, authenticate to AWS and initialize the
+backend:
+
+```bash
+cd infra
+aws login
+terraform init
+terraform plan
+```
+
+Create `infra/terraform.tfvars` from `infra/terraform.tfvars.example` before
+planning. The variables file is intentionally excluded from Git because it
+contains environment-specific values and secrets.

@@ -55,4 +55,3 @@ temp
 *.tfstate
 *.tfstate*.backup
 *.tfstate.lock.info
-.terraform.lock.hcl
