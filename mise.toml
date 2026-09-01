@@ -1,2 +1,38 @@
 [tools]
 bun = "1.3.9"
+terraform = "1.16.0"
+tflint = "0.64.0"
+
+[tasks."terraform:build"]
+description = "Build Lambda deployment artifacts"
+run = [
+  "bun run --cwd apps/receipt-processor build",
+  "bun run --cwd apps/server build:lambda",
+]
+
+[tasks."terraform:init"]
+description = "Initialize Terraform"
+run = "terraform -chdir=infra init -input=false"
+
+[tasks."terraform:format"]
+description = "Format Terraform files"
+run = "terraform -chdir=infra fmt -recursive"
+
+[tasks."terraform:check"]
+description = "Check formatting and validate Terraform"
+run = [
+  "terraform -chdir=infra fmt -check -recursive",
+  "terraform -chdir=infra validate",
+]
+
+[tasks."terraform:lint"]
+description = "Lint Terraform files"
+run = [
+  "tflint --chdir=infra --init",
+  "tflint --chdir=infra --recursive",
+]
+
+[tasks."terraform:plan"]
+description = "Build artifacts and generate a safe Terraform plan"
+depends = ["terraform:build"]
+run = "terraform -chdir=infra plan -input=false -lock=false"
