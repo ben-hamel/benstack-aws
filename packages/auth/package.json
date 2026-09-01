@@ -12,10 +12,9 @@
   "scripts": {},
   "dependencies": {
     "@benstack-aws/db": "workspace:*",
-    "drizzle-orm": "^0.45.1",
     "@benstack-aws/env": "workspace:*",
     "better-auth": "catalog:",
-    "dotenv": "catalog:",
+    "drizzle-orm": "^0.45.1",
     "zod": "catalog:"
   },
   "devDependencies": {

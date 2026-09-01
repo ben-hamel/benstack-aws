@@ -7,7 +7,6 @@
       "packages/*"
     ],
     "catalog": {
-      "dotenv": "^17.2.2",
       "zod": "^4.1.13",
       "@types/bun": "^1.3.4",
       "better-auth": "1.5.5",
@@ -41,7 +40,6 @@
   },
   "dependencies": {
     "@benstack-aws/env": "workspace:*",
-    "dotenv": "catalog:",
     "drizzle-kit": "^0.31.10",
     "drizzle-orm": "^0.45.2",
     "zod": "catalog:"

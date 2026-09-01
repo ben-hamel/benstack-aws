@@ -10,12 +10,12 @@
     }
   },
   "scripts": {
-    "db:setup": "bun run setup/index.ts",
-    "db:push": "bun run db:setup && drizzle-kit push",
-    "db:generate": "drizzle-kit generate",
-    "db:studio": "drizzle-kit studio",
-    "db:migrate": "drizzle-kit migrate",
-    "db:seed": "bun run seed/index.ts",
+    "db:setup": "bun --env-file=../../apps/server/.env.local run setup/index.ts",
+    "db:push": "bun run db:setup && bun --env-file=../../apps/server/.env.local run drizzle-kit push",
+    "db:generate": "bun --env-file=../../apps/server/.env.local run drizzle-kit generate",
+    "db:studio": "bun --env-file=../../apps/server/.env.local run drizzle-kit studio",
+    "db:migrate": "bun --env-file=../../apps/server/.env.local run drizzle-kit migrate",
+    "db:seed": "bun --env-file=../../apps/server/.env.local run seed/index.ts",
     "db:deploy": "bun run db:push && bun run db:seed",
     "db:start": "docker compose up -d",
     "db:watch": "docker compose up",
@@ -25,7 +25,6 @@
   "dependencies": {
     "@benstack-aws/env": "workspace:*",
     "@neondatabase/serverless": "^1.1.0",
-    "dotenv": "catalog:",
     "drizzle-orm": "^0.45.1",
     "pg": "^8.17.1",
     "zod": "catalog:"
