@@ -322,11 +322,11 @@ resource "aws_ecs_task_definition" "api" {
     }]
 
     secrets = [
-      { name = "DATABASE_URL",      valueFrom = "arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:parameter/benstack/database-url" },
+      { name = "DATABASE_URL", valueFrom = "arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:parameter/benstack/database-url" },
       { name = "BETTER_AUTH_SECRET", valueFrom = "arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:parameter/benstack/better-auth-secret" },
-      { name = "BETTER_AUTH_URL",    valueFrom = "arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:parameter/benstack/better-auth-url" },
-      { name = "CORS_ORIGIN",        valueFrom = "arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:parameter/benstack/cors-origin" },
-      { name = "ALLOWED_EMAILS",     valueFrom = "arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:parameter/benstack/allowed-emails" },
+      { name = "BETTER_AUTH_URL", valueFrom = "arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:parameter/benstack/better-auth-url" },
+      { name = "CORS_ORIGIN", valueFrom = "arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:parameter/benstack/cors-origin" },
+      { name = "ALLOWED_EMAILS", valueFrom = "arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:parameter/benstack/allowed-emails" },
       { name = "S3_RECEIPTS_BUCKET", valueFrom = "arn:aws:ssm:${var.aws_region}:${var.aws_account_id}:parameter/benstack/s3-receipts-bucket" }
     ]
 

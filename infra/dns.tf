@@ -25,11 +25,11 @@ resource "aws_route53_record" "api" {
   type    = "A"
 
   alias {
-    name                   = one(concat(
+    name = one(concat(
       [for m in module.hono_backend_server : m.alb_dns_name],
       [for m in module.hono_serverless_api : m.api_gateway_domain_name],
     ))
-    zone_id                = one(concat(
+    zone_id = one(concat(
       [for m in module.hono_backend_server : m.alb_zone_id],
       [for m in module.hono_serverless_api : m.api_gateway_hosted_zone_id],
     ))
