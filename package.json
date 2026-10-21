@@ -36,7 +36,8 @@
     "db:stop": "turbo -F @benstack-aws/db db:stop",
     "db:down": "turbo -F @benstack-aws/db db:down",
     "db:prod": "./scripts/db-prod.sh",
-    "build:lambda": "turbo -F @benstack-aws/receipt-processor build"
+    "build:lambda": "turbo -F @benstack-aws/receipt-processor build",
+    "sku": "bun run --cwd apps/sku-worker start --"
   },
   "dependencies": {
     "@benstack-aws/env": "workspace:*",
