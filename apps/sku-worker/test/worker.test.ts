@@ -11,6 +11,7 @@ import { workerModels } from "../src/models.ts";
 import { installationId, lockState, WorkerCredentials } from "../src/state.ts";
 import { COSTCO_SITES, searchEnvironment, validateProductUrl, validateSku, type ResearchWeb } from "../src/web.ts";
 import { JobDoc, MAX_TOOL_CALLS, openJob } from "../src/worker.ts";
+import { watchProgress } from "../src/progress.ts";
 
 async function temporary(t: TestContext) {
   const directory = await mkdtemp(join(tmpdir(), "benstack-worker-test-"));
@@ -161,7 +162,7 @@ test("page fetching receives the saved SKU and persists compact evidence", async
   } finally { await second.close(); }
 });
 
-test("an interrupted read-only search resumes from SQLite and keeps the original submission", async (t) => {
+test("an interrupted read-only search resumes with progress and keeps the original submission", async (t) => {
   const directory = await temporary(t);
   const { faux, models, model } = fakeModels();
   faux.setResponses([
@@ -179,8 +180,11 @@ test("an interrupted read-only search resumes from SQLite and keeps the original
     });
   };
   const first = await openJob({ directory, models, web: blocked, initial: { sku: "1572430", model } });
+  const progress = await watchProgress(first.harness, first.root.id, () => undefined);
   const running = first.run().catch(() => undefined);
   await started;
+  // Match CLI pause cleanup: detach observation, then close without cancelling.
+  await progress.stop();
   await first.close();
   await running;
 
@@ -188,6 +192,7 @@ test("an interrupted read-only search resumes from SQLite and keeps the original
   const restored = fakeWeb();
   restored.search = async () => { replays++; return "Exact-SKU evidence after restart"; };
   const second = await openJob({ directory, models, web: restored });
+  const resumedProgress = await watchProgress(second.harness, second.root.id, () => undefined);
   try {
     assert.equal(await second.run(), "Recovered match for SKU 1572430.");
     assert.equal(replays, 1);
@@ -195,7 +200,7 @@ test("an interrupted read-only search resumes from SQLite and keeps the original
     assert.equal(job?.toolTasks.length, 1, "replay must not consume another budget slot");
     const view = await second.root.context(BACKGROUND_CONTEXT);
     assert.equal(view.entries.filter((entry) => entry.kind === "pi.user").length, 1);
-  } finally { await second.close(); }
+  } finally { await resumedProgress.stop(); await second.close(); }
 });
 
 test("an unsupported subscription model reports an actionable error without raw provider details", async (t) => {

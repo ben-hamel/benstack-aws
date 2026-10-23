@@ -1,6 +1,6 @@
 # Local SKU research prototype
 
-A standalone CLI worker for Costco Canada, using Pi Durable 1.3.0, a separate
+A standalone CLI worker for Costco Canada, using Pi Durable 1.4.0, a separate
 ChatGPT plan-use login, and OpenAI hosted web search. Optional direct page reading
 uses `pi-web-access`'s standalone MCP server; new research no longer calls Exa.
 It does not import Benstack's environment, connect to Postgres, change the existing
@@ -135,6 +135,25 @@ browser-cookie access, PDFs and GitHub-specific handling are disabled.
 `pi-web-access` is pinned to 0.41.0, which meets this repo's three-day dependency
 release-age policy; we did not bypass that policy to install 0.42.0.
 
+## Progress output
+
+`research` and `resume` observe Pi Durable's committed `watchEvents()` stream,
+attached before submitting work. Fixed `[progress]` messages on **stderr** show
+model turns, Costco search/page-reader starts and finishes, and run boundaries.
+A finished tool or ended run is not a claim that research succeeded; the saved
+submission and final answer remain authoritative.
+
+The initial snapshot reflects saved activity; reopening a completed job does not
+replay historical progress or start research again. Slow observers can receive a
+replacement snapshot instead of every intermediate event. On pause or exit the
+observer is detached without cancelling the durable job. The final answer is
+printed once on **stdout**, not streamed through progress messages.
+
+Progress never prints message/thinking deltas, tool arguments/results, arbitrary
+tool names, or raw provider diagnostics. This is status visibility, not a token,
+cost, or hosted-search-call meter. Implementation reference:
+[upstream 1.4.0 JSON event example](https://github.com/earendil-works/pi/blob/v1.4.0/packages/durable/test/examples/19-json.ts).
+
 ## Stop and resume
 
 Research prints a job UUID before it starts. Press **Ctrl+C** to close the harness
@@ -164,6 +183,43 @@ and start a new research job after correcting the cause.
 One command owns the local worker state at a time. After a hard crash, allow about
 10 seconds for the stale lock to clear. Keep these files on a persistent local disk;
 container replacement would require an explicit persistence design.
+
+## Pi Durable upgrades
+
+Pi Durable, Pi AI, and Chord are pinned together to **1.4.0**. This upgrade added
+an explicit `checkpointWhen` policy to the worker's document definition. The
+upstream API is experimental; review release notes before changing these pins.
+
+**SQLite migration is automatic and one-way:** opening a 1.3.0 job with 1.4.0
+migrates its database from schema v1 to v2. Version 1.3.0 cannot reopen it afterward.
+Before running `research` or `resume` against existing state after upgrading, stop
+all worker processes and back up the jobs using SQLite's backup API (or copy each
+closed database together with any remaining WAL files). Keep backups outside Git.
+A rollback requires both the old dependencies and an unmigrated database backup.
+The upgrade does not proactively migrate saved jobs; opening one does.
+
+Upgrade validation on October 23, 2026:
+- Type checking and all 30 offline tests passed, including schema v1-to-v2 task-row
+  preservation and the existing interrupted-search recovery test on 1.4.0.
+- Copies of all 13 saved v1 jobs migrated and reopened successfully: 11 retained
+  exactly the same completed answers and two retained their unanswered status.
+  No model/search/page requests were made; original database/WAL hashes remained
+  unchanged. No legacy unfinished job was available for migration/recovery testing.
+- With user approval, the original strawberries job
+  `3238d4af-c921-4285-9e93-95a42c3220b9` was then resumed through the CLI on 1.4.0.
+  It returned its saved answer without new research; read-only inspection confirmed
+  schema v2, SQLite integrity `ok`, and one submission. The CLI's authenticated
+  model-catalog request was live. That original database is now migrated.
+- The user approved a one-time release-age exception for this upgrade, installed
+  with `bun install --ignore-scripts --minimum-release-age=0`. The lockfile changes
+  were limited to the related Earendil packages; the repo's normal three-day
+  release-age policy in `bunfig.toml` remains unchanged. Do not routinely use the
+  override.
+
+Version 1.4.0 also parks tasks after five consecutive crash recoveries without a
+new checkpoint. The CLI has no dedicated parked-task retry command yet; the
+five-minute invocation limit still pauses a stalled run. Graceful close/resume
+is not counted as a crash.
 
 ## Local state and logout
 
@@ -207,8 +263,9 @@ MCP argument contracts, hosted-search request/stream handling, and subprocess st
 Product-extraction tests use reduced saved-page fixtures and cover SKU selection,
 malformed/ambiguous data, named product sections, output limits, text-only MCP
 continuation reconstruction, saved-SKU forwarding, and reader cleanup.
-They make no model or web-search
-requests. `search-test` is the separate live search check. End-to-end ChatGPT login
+Progress tests cover real committed tool events with faux models, completed-job
+reopening, listener cleanup, payload suppression, and pause/recovery with an
+attached observer. They make no model or web-search requests. `search-test` is the separate live search check. End-to-end ChatGPT login
 and inference require your consent and are not claimed verified by offline tests.
 
 ## Scope

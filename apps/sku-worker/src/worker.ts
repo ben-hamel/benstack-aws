@@ -21,6 +21,7 @@ export const JobDoc = defineDoc<{
   history: "latest",
   fork: "initial",
   initial: () => ({ sku: "", model: { provider: "", modelId: "" }, toolTasks: [] }),
+  checkpointWhen: () => false,
 });
 
 const INSTRUCTIONS = `You research Costco products for a user in Newfoundland, Canada.
@@ -66,7 +67,6 @@ export async function openJob(options: {
         }
         return validateSku(job.sku);
       }, context);
-      log(`Searching ${args.site} for SKU ${sku}...`);
       return { output: [{ type: "text" as const, text: await options.web.search(sku, args.site, context.abortSignal) }] };
     },
   });
@@ -84,7 +84,6 @@ export async function openJob(options: {
         }
         return validateSku(job.sku);
       }, context);
-      log("Reading a Costco Canada page...");
       return { output: [{ type: "text" as const, text: await options.web.fetchPage(args.url, context.abortSignal, sku) }] };
     },
   });

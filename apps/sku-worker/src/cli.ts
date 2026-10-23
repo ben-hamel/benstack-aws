@@ -10,6 +10,7 @@ import { installationId, lockState, stateDirectory, UserError, WorkerCredentials
 import { COSTCO_SITES, validateSku } from "./web.ts";
 import { openOpenAIResearchWeb } from "./openai-search.ts";
 import { openJob } from "./worker.ts";
+import { watchProgress } from "./progress.ts";
 
 const HELP = `Local Costco Canada research prototype (Node.js 22.19+)
 
@@ -150,6 +151,7 @@ async function main() {
     console.log(`Search backend: OpenAI hosted search (${searchModel}); independent of reasoning model.`);
     const web = openOpenAIResearchWeb(directory, models, searchModel);
     let job: Awaited<ReturnType<typeof openJob>> | undefined;
+    let progress: Awaited<ReturnType<typeof watchProgress>> | undefined;
     const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(300_000)]);
     let onAbort: (() => void) | undefined;
     try {
@@ -158,20 +160,28 @@ async function main() {
         models,
         web,
         initial: command === "research" ? { sku: argument!, model: { provider: "openai", modelId } } : undefined,
-        log: (message) => console.log(message),
+        log: (message) => console.error(message),
       });
       console.log(`Researching SKU ${job.job.sku} with ${job.job.model.modelId}. Ctrl+C pauses; five-minute limit per run.`);
+      progress = await watchProgress(job.harness, job.root.id, (message) => console.error(message));
       if (signal.aborted) throw new UserError(`Paused. Resume the saved job: ${jobId}`);
       const stopped = new Promise<never>((_resolve, reject) => {
         onAbort = () => reject(new UserError(`Paused. Resume the saved job: ${jobId}`));
         if (signal.aborted) onAbort();
         else signal.addEventListener("abort", onAbort, { once: true });
       });
-      console.log(`\nPROPOSED MATCH - REVIEW REQUIRED\n\n${await Promise.race([job.run(), stopped])}`);
+      const answer = await Promise.race([job.run(), stopped]);
+      // Allow the last committed event batch to reach the listener, as in the
+      // upstream JSON example. The answer itself is printed only once, below.
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      await progress.stop();
+      progress = undefined;
+      console.log(`\nPROPOSED MATCH - REVIEW REQUIRED\n\n${answer}`);
     } finally {
       if (onAbort) signal.removeEventListener("abort", onAbort);
       // Close preserves unfinished work. Do not call abort(), which cancels it permanently.
-      try { await job?.close(); } finally { await web.close(); }
+      try { await progress?.stop(); }
+      finally { try { await job?.close(); } finally { await web.close(); } }
     }
   } finally {
     process.removeListener("SIGINT", stop);
