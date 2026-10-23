@@ -1,6 +1,6 @@
 # Where I left off: local Durable SKU worker
 
-Updated: 2026-10-22
+Updated: 2026-10-23
 
 ## Goal
 
@@ -18,32 +18,45 @@ service or production integration.
 - `8f63eaf`: committed the intentional removal of the overly broad Secret Safety
   section from `AGENTS.md`. Do not restore it automatically or add replacement
   boilerplate. This decision is resolved.
-- The working tree was clean before creating this checkpoint. Neither commit was
-  pushed during the checkpoint/policy-review session; check current remote state
-  rather than assuming that remains true.
+- `91b5c87`: committed this checkpoint and workflow options.
+- Working tree was clean before this checkpoint update. Remote/push state was not
+  checked this session.
 
 ## Verified versus uncertain
 
-The commits and current branch were inspected in the checkpoint session. Worker
-implementation was not resumed, tests were not rerun, and live login, inference,
-search, or resume behavior was not verified in that session.
+Inspected all eight saved job databases read-only under
+`~/.local/state/benstack-sku-worker/jobs/`, without reading credentials or making
+live requests. Transcripts from October 20-21 establish:
 
-The worker README documents offline tests and separate live checks. Do not infer
-that those checks have passed just because they are documented. Earlier
-implementation-session live results have not been reconstructed here.
+- Two initial jobs settled as `unanswered`: `gpt-5.4` was rejected for ChatGPT
+  account access. Six later jobs settled as `done` with saved answers using
+  `gpt-6.1-sol`. Completion does not mean the proposed identification was verified.
+- Earlier Exa-backed runs proposed Bounce Outdoor Fresh dryer sheets, 2 x 160
+  sheets (SKU `1572430`), and Ivory Snow fragrance-free detergent, 4.55 L / 113
+  loads (`1653524`). Other Exa runs had weaker or unresolved evidence.
+- The latest two jobs (`a3763fe7-8915-44d9-89ea-794dafdfda59` and
+  `93dd5be0-45d4-450d-82d6-42b022e3d821`) successfully used OpenAI hosted search
+  on Same-Day and Business Centre after Costco.ca returned no supported citation.
+  Both proposed green onions, 907 g, for `3028018`, with moderate confidence.
+- Live inference, hosted search, page fetching, and saved-answer persistence
+  therefore worked in those historical runs. Direct page extraction sometimes
+  returned boilerplate or omitted SKU/size headers; the final answers distinguished
+  hosted-search claims from independently fetched evidence.
+
+Interrupt/resume behavior and a separate `search-test` run are not established by
+this inspection. Offline tests were not rerun, and current authentication/service
+availability was not checked. No implementation or infrastructure was changed.
 
 ## Next action and why
 
-**Establish the actual validation state, then discuss the next milestone before
-changing code.** This avoids repeating successful work or assuming the prototype
-is fully validated.
+**Agree on the next milestone before changing code or making live requests.**
+Historical end-to-end research is now established; do not repeat login/search
+checks merely to reconstruct progress.
 
-1. Read `apps/sku-worker/README.md` and inspect current Git status/history.
-2. Ask me what was already tried successfully in the earlier implementation
-   session, or consult its non-sensitive notes if available.
-3. Summarize what is known, what remains unverified, and recommend one next step.
-4. Agree whether to stop at the prototype milestone or run a bounded validation
-   session. Do not automatically start more implementation or live requests.
+Recommend a bounded interrupt/resume validation if continuing prototype validation,
+since that remains unverified. Agree on request/allowance scope first. Alternatively,
+stop at the prototype milestone or discuss improving direct SKU/size extraction as
+a separate implementation task. Do not automatically start any of these.
 
 ## Useful references
 
@@ -67,9 +80,10 @@ is fully validated.
 ## Next-session prompt
 
 > Read STATUS.md and apps/sku-worker/README.md, then inspect Git status and recent
-> commits. Help me reconstruct which validations already succeeded and recommend
-> the next concrete step. Discuss before changing code, starting live requests,
-> logging in, or committing. Do not automatically resume worker implementation.
+> commits. Historical live research is confirmed from saved Durable transcripts;
+> interrupt/resume remains unverified. Help me choose the next milestone. Discuss
+> before changing code, starting live requests, logging in, or committing. Do not
+> automatically resume worker implementation.
 
 ## Stopping routine
 
