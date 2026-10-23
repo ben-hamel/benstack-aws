@@ -90,9 +90,12 @@ For research, the model can choose among exactly two tools:
 - `search_costco`: hosted research for an exact numeric SKU on Costco.ca, Costco
   Same-Day Canada, or Costco Business Centre Canada. The SKU comes from saved job
   state, not model input. Returns a clearly labelled OpenAI summary with citations.
-- `fetch_costco_page`: readable HTTPS pages from those exact hosts (and their
-  `www` aliases). Other hosts, local paths, credentials in URLs and nonstandard ports
-  are rejected. The fetcher enforces same-origin redirects and blocks private IPs.
+- `fetch_costco_page`: direct product evidence from HTTPS pages on those exact
+  hosts (and their `www` aliases). Fetches HTML once, then extracts JSON-LD Product
+  fields plus Costco's named product-details and specifications sections. The saved
+  job SKU, not a model-supplied SKU, selects the product. Other hosts, local paths,
+  credentials in URLs and nonstandard ports are rejected. The fetcher enforces
+  same-origin redirects and blocks private IPs.
 
 The agent has **no shell, filesystem, database or deployment tools**. No Costco
 login, cookies, postal code or browser automation is supplied. Stock and price
@@ -101,10 +104,29 @@ contradictory or inaccessible; search snippets are not proof of an exact match.
 The system prompt treats page text as untrusted data, but this is not a guarantee
 against prompt injection or incorrect identification. Human review is still required.
 
-The page reader starts lazily, only if the reasoning model asks to read a page.
-Readable extraction can omit product headers; hosted search may supply additional
-cited evidence, but raw-HTML/structured-product extraction is not implemented here.
-The retained Exa adapter is not used for search by the CLI.
+The page reader starts lazily for each requested page and closes after extraction,
+releasing the full HTML held in the subprocess's memory.
+Unlike article-style readable extraction, this path preserves structured SKU/name
+fields and targeted size/pack evidence. It never executes page scripts, launches a
+browser, or infers missing product attributes. Mismatched, absent, or conflicting
+structured product identities are reported as unresolved; fields from separate
+products are not merged. Pages without JSON-LD Product data or with changed section
+selectors can still lack evidence, including Same-Day pages. Hosted search remains
+a separate, explicitly labelled source.
+
+Response bodies are limited to 5 MiB by the fetcher and checked again before parsing.
+The pinned library's MCP server returns text only; the worker reassembles its bounded
+raw-content slices through `get_search_content`. These are local subprocess-memory
+reads, not additional HTTP fetches or model calls. Lengths and offsets are validated;
+incomplete or changed response contracts fail closed. HTTP status and MIME metadata
+are not exposed by that MCP transport and are explicitly not claimed verified.
+
+Compact extracted output is bounded to 16,000 characters and is what Durable saves;
+full HTML is not sent to the model or stored in its transcript. The standalone MCP
+process retains the raw body in memory until closed; the worker closes it after each
+page. Its dedicated disk-cache directory is also cleared on startup/close, including
+any leftovers from other library versions. This is not a hard memory/CPU sandbox;
+hosted concurrency still needs a separate resource-management design. The retained Exa adapter is not used for search by the CLI.
 
 The MCP subprocess receives a restricted environment and its own configuration,
 not the parent's API keys, AWS environment or personal Pi configuration. This is
@@ -182,6 +204,9 @@ Offline tests use scripted faux models, fake web results and temporary private
 SQLite storage. They verify recovery, idempotent submission, the tool budget,
 credential serialization/permissions, lack of API-key fallback, URL restrictions,
 MCP argument contracts, hosted-search request/stream handling, and subprocess startup.
+Product-extraction tests use reduced saved-page fixtures and cover SKU selection,
+malformed/ambiguous data, named product sections, output limits, text-only MCP
+continuation reconstruction, saved-SKU forwarding, and reader cleanup.
 They make no model or web-search
 requests. `search-test` is the separate live search check. End-to-end ChatGPT login
 and inference require your consent and are not claimed verified by offline tests.

@@ -1,9 +1,12 @@
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { rm } from "node:fs/promises";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import { privateDirectory, UserError, writeJson } from "./state.ts";
+import { extractProductEvidence } from "./product-evidence.ts";
+import { readMcpPage } from "./mcp-page.ts";
 
 export const COSTCO_SITES = ["costco.ca", "sameday.costco.ca", "costcobusinesscentre.ca"] as const;
 export type CostcoSite = typeof COSTCO_SITES[number];
@@ -14,6 +17,7 @@ export function validateSku(sku: string): string {
 }
 
 export function validateProductUrl(value: string): string {
+  if (value.length > 2048) throw new UserError("Product URL exceeds the 2048-character limit.");
   let url: URL;
   try { url = new URL(value); } catch { throw new UserError("Provide a full HTTPS Costco Canada URL."); }
   const host = url.hostname.replace(/^www\./, "");
@@ -27,7 +31,7 @@ export function validateProductUrl(value: string): string {
 
 export interface ResearchWeb {
   search(sku: string, site: CostcoSite, signal?: AbortSignal): Promise<string>;
-  fetchPage(url: string, signal?: AbortSignal): Promise<string>;
+  fetchPage(url: string, signal?: AbortSignal, expectedSku?: string): Promise<string>;
   close(): Promise<void>;
 }
 
@@ -46,17 +50,20 @@ export function searchEnvironment(home: string): Record<string, string> {
 export async function openResearchWeb(directory: string): Promise<ResearchWeb> {
   const searchHome = join(directory, "search");
   await privateDirectory(searchHome);
+  // Raw fetches are temporarily cached by the library. Remove crash leftovers on startup.
+  const cacheDirectory = join(searchHome, "web-search-cache");
+  await rm(cacheDirectory, { recursive: true, force: true });
   await writeJson(join(searchHome, "web-search.json"), {
     provider: "exa",
     webSearch: { allowedProviders: ["exa"] },
     workflow: "none",
-    maxInlineContentChars: 16_000,
+    maxInlineContentChars: 200_000,
     allowBrowserCookies: false,
     githubClone: { enabled: false },
     githubPrIssue: { enabled: false },
     image: { enabled: false },
     pdf: { enabled: false },
-    fetch: { timeout: 20, defaultMode: "readable", allowedModes: ["readable"] },
+    fetch: { timeout: 20, defaultMode: "raw", allowedModes: ["raw"] },
     fetchRouting: { providers: ["http"], allowRemoteHostedProviders: false },
     fetchContent: { domainPolicy: { allow: [...COSTCO_SITES] }, redirects: "same-origin" },
   });
@@ -76,24 +83,30 @@ export async function openResearchWeb(directory: string): Promise<ResearchWeb> {
     await client.close().catch(() => undefined);
     throw new UserError("The standalone web-search process could not start.");
   }
-  return researchWebFromClient(client);
+  const web = researchWebFromClient(client);
+  return {
+    ...web,
+    async close() {
+      try { await web.close(); }
+      finally { await rm(cacheDirectory, { recursive: true, force: true }); }
+    },
+  };
 }
 
 /** Small MCP-to-worker adapter; injectable so tool contracts can be tested offline. */
 export function researchWebFromClient(client: Pick<Client, "callTool" | "close">): ResearchWeb {
-  async function call(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<string> {
+  async function call(name: string, args: Record<string, unknown>, signal?: AbortSignal) {
     try {
       const result = CallToolResultSchema.parse(await client.callTool({ name, arguments: args }, CallToolResultSchema, {
         timeout: 45_000,
         maxTotalTimeout: 45_000,
         signal,
       }));
-      const text = result.content
-        .filter((item) => item.type === "text")
-        .map((item) => item.text)
-        .join("\n");
-      if (result.isError) throw new UserError(`Search/fetch service error: ${text.slice(0, 500)}`);
-      return text.slice(0, 16_000);
+      if (result.isError && name !== "fetch_content") {
+        const reason = result.content.filter((item) => item.type === "text").map((item) => item.text).join("\n").slice(0, 500);
+        throw new UserError(`Search/fetch service error: ${reason}`);
+      }
+      return result;
     } catch (error) {
       if (signal?.aborted) throw new UserError("Web request interrupted; saved work can be resumed.");
       if (error instanceof UserError) throw error;
@@ -113,11 +126,24 @@ export function researchWebFromClient(client: Pick<Client, "callTool" | "close">
         domainFilter: [site],
         numResults: 5,
         includeContent: false,
-      }, signal);
+      }, signal).then((result) => result.content.filter((item) => item.type === "text").map((item) => item.text).join("\n").slice(0, 16_000));
     },
-    fetchPage(url, signal) {
-      // Redirect policy is enforced by the MCP process config, not its per-call schema.
-      return call("fetch_content", { url: validateProductUrl(url), mode: "readable" }, signal);
+    fetchPage(url, signal, expectedSku) {
+      const sourceUrl = validateProductUrl(url);
+      if (expectedSku !== undefined) validateSku(expectedSku);
+      return (async () => {
+        const bounded = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(45_000)]);
+        const result = await call("fetch_content", { url: sourceUrl, mode: "raw" }, bounded);
+        if (result.isError) throw new UserError("Page fetch failed; product evidence is unresolved.");
+        const texts = result.content.filter((item) => item.type === "text").map((item) => item.text);
+        const html = await readMcpPage(texts, async (args) => {
+          const page = await call("get_search_content", args, bounded);
+          if (page.isError) throw new UserError("Page continuation failed; product evidence is unresolved.");
+          return page.content.filter((item) => item.type === "text").map((item) => item.text).join("\n");
+        });
+        if (bounded.aborted) throw new UserError("Web request interrupted; saved work can be resumed.");
+        return extractProductEvidence(html, sourceUrl, expectedSku);
+      })();
     },
     close: () => client.close(),
   };

@@ -91,7 +91,7 @@ export function openOpenAIResearchWeb(
   request: typeof fetch = fetch,
   openPages: () => Promise<ResearchWeb> = () => openResearchWeb(directory),
 ): ResearchWeb {
-  let pages: Promise<ResearchWeb> | undefined;
+  const readers = new Set<Promise<ResearchWeb>>();
   return {
     async search(sku: string, site: CostcoSite, signal?: AbortSignal) {
       validateSku(sku);
@@ -121,13 +121,22 @@ export function openOpenAIResearchWeb(
         throw new UserError("OpenAI hosted search failed. Raw authentication/provider diagnostics were withheld; no Exa fallback was used.");
       }
     },
-    fetchPage(url, signal) {
+    fetchPage(url, signal, expectedSku) {
       validateProductUrl(url);
-      pages ??= openPages();
-      return pages.then((web) => web.fetchPage(url, signal));
+      if (expectedSku !== undefined) validateSku(expectedSku);
+      const opening = openPages();
+      readers.add(opening);
+      return (async () => {
+        try {
+          const web = await opening;
+          try { return await web.fetchPage(url, signal, expectedSku); }
+          finally { await web.close(); }
+        } finally { readers.delete(opening); }
+      })();
     },
     async close() {
-      if (pages) await (await pages).close();
+      // Each completed fetch closes its subprocess, releasing the raw body held in memory.
+      await Promise.all([...readers].map(async (opening) => (await opening).close()));
     },
   };
 }

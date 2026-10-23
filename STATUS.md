@@ -19,8 +19,12 @@ service or production integration.
   section from `AGENTS.md`. Do not restore it automatically or add replacement
   boilerplate. This decision is resolved.
 - `91b5c87`: committed this checkpoint and workflow options.
-- Working tree was clean before this checkpoint update. Remote/push state was not
-  checked this session.
+- `baa37d7`: committed the recovered historical validation results.
+- Structured product extraction, text-only MCP raw-page reconstruction, saved-SKU
+  forwarding, per-page reader cleanup, fixtures/tests, README changes, and a pinned
+  direct `linkedom` dependency with lockfile update are included in the extraction
+  milestone commit containing this checkpoint. The user approved committing it.
+- Remote/push state was not checked. No infrastructure was changed.
 
 ## Verified versus uncertain
 
@@ -34,7 +38,7 @@ live requests. Transcripts from October 20-21 establish:
 - Earlier Exa-backed runs proposed Bounce Outdoor Fresh dryer sheets, 2 x 160
   sheets (SKU `1572430`), and Ivory Snow fragrance-free detergent, 4.55 L / 113
   loads (`1653524`). Other Exa runs had weaker or unresolved evidence.
-- The latest two jobs (`a3763fe7-8915-44d9-89ea-794dafdfda59` and
+- Two historical jobs (`a3763fe7-8915-44d9-89ea-794dafdfda59` and
   `93dd5be0-45d4-450d-82d6-42b022e3d821`) successfully used OpenAI hosted search
   on Same-Day and Business Centre after Costco.ca returned no supported citation.
   Both proposed green onions, 907 g, for `3028018`, with moderate confidence.
@@ -43,20 +47,52 @@ live requests. Transcripts from October 20-21 establish:
   returned boilerplate or omitted SKU/size headers; the final answers distinguished
   hosted-search claims from independently fetched evidence.
 
-Interrupt/resume behavior and a separate `search-test` run are not established by
-this inspection. Offline tests were not rerun, and current authentication/service
-availability was not checked. No implementation or infrastructure was changed.
+Current-session results:
+
+- User confirmed interrupt/resume had already worked in their prior manual test;
+  this was not repeated live in this session.
+- Comparing the exact same saved HTML before/after Readability reproduced lost
+  SKU/product fields. Both tested pages contained JSON-LD Product data.
+- Implemented one HTTP fetch per page, followed by bounded local extraction of
+  JSON-LD Product fields and named Costco product-details/specifications sections.
+  Product selection uses the saved job SKU; missing or conflicting evidence is not
+  guessed or combined across products.
+- The first fresh job (`f4536b53-3e88-43e4-9625-f3598ff5b370`) completed with only
+  search-backed evidence because an incorrect MCP integration assumption broke
+  direct fetching. Fixed it: the pinned library forwards text only, so complete
+  raw bodies are reconstructed from validated local-memory continuation slices.
+  Also fixed saved-SKU forwarding through the OpenAI search/page-reader wrapper.
+- Real page-only fetches then recovered SKU/size/form for green onions and
+  SKU/scent/2 x 160-sheet pack evidence for Bounce, without model/search requests.
+- Fresh end-to-end job `206c1324-7a95-4637-92b3-d083edc18d2c` for `3028018`
+  settled as `done`: directly fetched Business Centre evidence established exact
+  SKU, Green Onions, 907 g / 2 lb, and whole form. The answer kept brand and
+  pack/bunch count unresolved. Same-Day provided no structured product evidence.
+- Read-only inspection of that job confirmed compact persisted fetch results
+  (1,159 and 869 bytes), with no raw HTML. Each page-reader subprocess closes after
+  extraction, releasing its raw-body memory. Full HTML is not sent to the model or
+  saved in Durable's transcript.
+- Type checking, all 29 offline tests, and `git diff --check` passed after the fix.
+  Live research used ChatGPT/search allowance; do not describe this session as
+  entirely offline.
+
+Remaining limitations: Same-Day pages and pages without usable Product JSON-LD or
+with changed section selectors can remain unresolved. MCP does not expose HTTP
+status/MIME metadata; these are explicitly not independently verified. Validation
+covers two live page examples and one successful post-fix end-to-end job, not broad
+Costco coverage, hosting readiness, or production concurrency/resource management.
 
 ## Next action and why
 
-**Agree on the next milestone before changing code or making live requests.**
-Historical end-to-end research is now established; do not repeat login/search
-checks merely to reconstruct progress.
+**Agree whether to stop at this prototype milestone or scope broader SKU/Same-Day
+coverage.** The user approved committing the extraction changes. All 29 offline
+tests, type checking, and `git diff --check` passed again before committing; no
+additional live validation was run. Do not repeat login/search or interrupt/resume
+checks just to reconstruct progress.
 
-Recommend a bounded interrupt/resume validation if continuing prototype validation,
-since that remains unverified. Agree on request/allowance scope first. Alternatively,
-stop at the prototype milestone or discuss improving direct SKU/size extraction as
-a separate implementation task. Do not automatically start any of these.
+Hosting is eventual intent, not implemented: resource limits,
+durable persistence, recovery, and a suitable hosted authentication/access design
+need separate planning. Do not automatically deploy or start more live requests.
 
 ## Useful references
 
@@ -80,10 +116,11 @@ a separate implementation task. Do not automatically start any of these.
 ## Next-session prompt
 
 > Read STATUS.md and apps/sku-worker/README.md, then inspect Git status and recent
-> commits. Historical live research is confirmed from saved Durable transcripts;
-> interrupt/resume remains unverified. Help me choose the next milestone. Discuss
-> before changing code, starting live requests, logging in, or committing. Do not
-> automatically resume worker implementation.
+> commits. Structured extraction is implemented and approved for commit; 29 offline
+> tests and one fresh post-fix end-to-end job passed. User previously tested resume.
+> Help choose the next milestone. Discuss before changing
+> code, starting live requests, logging in, or committing. Do not automatically
+> resume implementation or deploy.
 
 ## Stopping routine
 

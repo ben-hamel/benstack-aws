@@ -65,6 +65,7 @@ test("OpenAI search is independent of the reasoning model and sends only approve
   };
   let calls = 0;
   let openedPages = 0;
+  let closedPages = 0;
   const request: typeof fetch = async (endpoint, options) => {
     calls++;
     assert.equal(endpoint, "https://api.openai.com/v1/responses");
@@ -82,13 +83,18 @@ test("OpenAI search is independent of the reasoning model and sends only approve
   };
   const web = openOpenAIResearchWeb("unused-private-path", models, "gpt-6.1-sol", request, async () => {
     openedPages++;
-    return { search: async () => { throw new Error("Exa must not be called"); }, fetchPage: async () => "readable page", close: async () => undefined };
+    return {
+      search: async () => { throw new Error("Exa must not be called"); },
+      fetchPage: async (_url, _signal, sku) => { assert.equal(sku, "3028018"); return "page evidence"; },
+      close: async () => { closedPages++; },
+    };
   });
   try {
     assert.match(await web.search("3028018", "costcobusinesscentre.ca"), /Green onions/);
     assert.equal(openedPages, 0, "hosted search needs no MCP process");
-    assert.equal(await web.fetchPage(url), "readable page");
+    assert.equal(await web.fetchPage(url, undefined, "3028018"), "page evidence");
     assert.equal(openedPages, 1);
+    assert.equal(closedPages, 1, "release raw body memory immediately after each page");
     assert.equal(calls, 1);
     await assert.rejects(web.search("bad sku", "costco.ca"));
     assert.throws(() => web.fetchPage("https://attacker.example/"));

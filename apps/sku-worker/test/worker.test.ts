@@ -131,6 +131,36 @@ test("a completed job reopens without another model request, search, or duplicat
   } finally { await second.close(); }
 });
 
+test("page fetching receives the saved SKU and persists compact evidence", async (t) => {
+  const directory = await temporary(t);
+  const { faux, models, model } = fakeModels();
+  const web = fakeWeb();
+  let fetches = 0;
+  web.fetchPage = async (url, _signal, sku) => {
+    fetches++;
+    assert.equal(url, "https://www.costco.ca/product.html");
+    assert.equal(sku, "1572430");
+    return 'Direct page evidence: {"sku":"1572430","name":"Bounce"}';
+  };
+  faux.setResponses([
+    fauxAssistantMessage([fauxToolCall("fetch_costco_page", { url: "https://www.costco.ca/product.html" })], { stopReason: "toolUse" }),
+    fauxAssistantMessage("Proposed Bounce match for review."),
+  ]);
+  const first = await openJob({ directory, models, web, initial: { sku: "1572430", model } });
+  try {
+    assert.match(await first.run(), /Proposed Bounce/);
+    const view = await first.root.context(BACKGROUND_CONTEXT);
+    assert.match(JSON.stringify(view.entries), /Direct page evidence/);
+    assert.doesNotMatch(JSON.stringify(view.entries), /<html|<script/);
+  } finally { await first.close(); }
+  const second = await openJob({ directory, models, web });
+  try {
+    assert.match(await second.run(), /Proposed Bounce/);
+    assert.equal(fetches, 1);
+    assert.equal(faux.state.callCount, 2);
+  } finally { await second.close(); }
+});
+
 test("an interrupted read-only search resumes from SQLite and keeps the original submission", async (t) => {
   const directory = await temporary(t);
   const { faux, models, model } = fakeModels();
