@@ -9,7 +9,7 @@ import { DEFAULT_MODEL, discoverPlanModels, selectPlanModel, workerModels } from
 import { installationId, lockState, stateDirectory, UserError, WorkerCredentials } from "./state.ts";
 import { COSTCO_SITES, validateSku } from "./web.ts";
 import { openOpenAIResearchWeb } from "./openai-search.ts";
-import { openJob } from "./worker.ts";
+import { openJob, validateTaskId } from "./worker.ts";
 import { watchProgress } from "./progress.ts";
 
 const HELP = `Local Costco Canada research prototype (Node.js 22.19+)
@@ -21,12 +21,14 @@ From the repo root:
   bun run sku search-test 1572430
   bun run sku research 1572430 [--model ${DEFAULT_MODEL}]
   bun run sku resume <job-id>
+  bun run sku retry <job-id> <task-id>
   bun run sku logout
 
 Login is separate from Pi/Codex. Uses ChatGPT plan consent, never an ambient API key.
 Search uses OpenAI hosted web search through your ChatGPT plan, separately from reasoning.
 Page fetches are limited to supported Costco Canada sites.
 Ctrl+C pauses research; resume the printed job ID. No Benstack database access.
+Retry explicitly unparks one crash-loop task and may consume model/search allowance.
 Private state: SKU_WORKER_STATE_DIR or ~/.local/state/benstack-sku-worker
 `;
 
@@ -75,17 +77,19 @@ async function main() {
     allowPositionals: true,
     strict: true,
   });
-  const [command, argument] = positionals;
+  const [command, argument, taskId] = positionals;
   if (values.help || !command || command === "help") { console.log(HELP); return; }
-  if (!["login", "logout", "status", "models", "search-test", "research", "resume"].includes(command)
-    || positionals.length !== (["search-test", "research", "resume"].includes(command) ? 2 : 1)
+  if (!["login", "logout", "status", "models", "search-test", "research", "resume", "retry"].includes(command)
+    || positionals.length !== (command === "retry" ? 3 : ["search-test", "research", "resume"].includes(command) ? 2 : 1)
     || (values.model && command !== "research")) {
     throw new UserError("Invalid arguments. Run the worker with --help for usage.");
   }
   if (["search-test", "research"].includes(command)) validateSku(argument!);
-  if (command === "resume" && !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(argument!)) {
+  if (["resume", "retry"].includes(command) && !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(argument!)) {
     throw new UserError("Use the job UUID printed by a previous research command.");
   }
+
+  if (command === "retry") validateTaskId(taskId!);
 
   const directory = stateDirectory();
   const release = await lockState(directory);
@@ -140,9 +144,9 @@ async function main() {
       return;
     }
     const modelId = command === "research" ? selectPlanModel(available, known, values.model) : DEFAULT_MODEL;
-    const jobId = command === "resume" ? argument! : randomUUID();
+    const jobId = command === "research" ? randomUUID() : argument!;
     const jobDirectory = join(directory, "jobs", jobId);
-    if (command === "resume") {
+    if (command !== "research") {
       try { await access(join(jobDirectory, "session.sqlite")); }
       catch { throw new UserError("No saved job with that ID exists in this worker's state directory."); }
     }
@@ -170,7 +174,8 @@ async function main() {
         if (signal.aborted) onAbort();
         else signal.addEventListener("abort", onAbort, { once: true });
       });
-      const answer = await Promise.race([job.run(), stopped]);
+      if (command === "retry") console.error(`Explicit retry of task ${taskId}; interrupted requests may repeat and consume allowance.`);
+      const answer = await Promise.race([job.run(command === "retry" ? { retryTaskId: taskId! } : undefined), stopped]);
       // Allow the last committed event batch to reach the listener, as in the
       // upstream JSON example. The answer itself is printed only once, below.
       await new Promise<void>((resolve) => setImmediate(resolve));

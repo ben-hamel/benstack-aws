@@ -184,6 +184,35 @@ One command owns the local worker state at a time. After a hard crash, allow abo
 10 seconds for the stale lock to clear. Keep these files on a persistent local disk;
 container replacement would require an explicit persistence design.
 
+## Parked-task recovery
+
+After five consecutive crashes without saved task progress, Pi Durable parks the
+task instead of restarting it indefinitely. `resume` detects parked tasks before
+starting research and exits with the exact job/task retry command instead of
+waiting for the five-minute limit. Harness reports also identify parked task IDs;
+raw error payloads are not printed.
+
+First investigate/fix the cause (for example, a repeatable process crash or resource
+limit). Then explicitly retry the numeric task ID shown in the message:
+
+```bash
+bun run sku retry <job-id> <task-id>
+```
+
+This clears that task's crash counter via `harness.retryTask()` and continues the
+same saved job/submission with normal progress output, Ctrl+C pause, five-minute
+invocation limit, and persistent tool budget. It does not create a new research job
+or reset the budget. Replaying the same tool task keeps its existing budget slot.
+Only a currently parked task belonging to that job can be retried: missing,
+completed, or non-parked task IDs are rejected rather than silently resumed.
+If other tasks remain parked, the worker prints their retry commands too.
+
+**Retry can repeat interrupted model/search/page requests and consume allowance.**
+There is no automatic retry of parked tasks. This is not a general retry for jobs
+already settled as `unanswered`, nor a fix for the cause of a crash. Ordinary
+Ctrl+C pause/resume does not need this command. Like `resume`, `retry` requires the
+worker login, checks the account model catalog, and can migrate legacy SQLite state.
+
 ## Pi Durable upgrades
 
 Pi Durable, Pi AI, and Chord are pinned together to **1.4.0**. This upgrade added
@@ -217,9 +246,8 @@ Upgrade validation on October 23, 2026:
   override.
 
 Version 1.4.0 also parks tasks after five consecutive crash recoveries without a
-new checkpoint. The CLI has no dedicated parked-task retry command yet; the
-five-minute invocation limit still pauses a stalled run. Graceful close/resume
-is not counted as a crash.
+new checkpoint. See parked-task recovery below. Graceful close/resume is not
+counted as a crash.
 
 ## Local state and logout
 
@@ -265,7 +293,10 @@ malformed/ambiguous data, named product sections, output limits, text-only MCP
 continuation reconstruction, saved-SKU forwarding, and reader cleanup.
 Progress tests cover real committed tool events with faux models, completed-job
 reopening, listener cleanup, payload suppression, and pause/recovery with an
-attached observer. They make no model or web-search requests. `search-test` is the separate live search check. End-to-end ChatGPT login
+attached observer. Recovery tests kill temporary subprocesses during faux model
+and search execution five times, verify real crash-loop parking, and check explicit
+retry, invalid targets, stable submission identity, and tool-budget preservation.
+They make no model or web-search requests. `search-test` is the separate live search check. End-to-end ChatGPT login
 and inference require your consent and are not claimed verified by offline tests.
 
 ## Scope

@@ -2,14 +2,21 @@ import type { Models } from "@earendil-works/pi-ai/models";
 import { Type } from "@earendil-works/pi-ai";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import {
-  AssistantEntry, createRegistry, defineDoc, defineExtension, defineTool, Harness,
+  AssistantEntry, createRegistry, defineDoc, defineExtension, defineTool, Harness, type TaskId,
 } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { privateDirectory, UserError } from "./state.ts";
 import { COSTCO_SITES, type ResearchWeb, validateSku } from "./web.ts";
 
 export const MAX_TOOL_CALLS = 12;
+
+export function validateTaskId(value: string): TaskId {
+  if (!/^[1-9][0-9]*$/.test(value) || !Number.isSafeInteger(Number(value))) {
+    throw new UserError("Use the positive numeric task ID shown in the parked-job message.");
+  }
+  return Number(value) as TaskId;
+}
 export const JobDoc = defineDoc<{
   sku: string;
   model: { provider: string; modelId: string };
@@ -97,7 +104,13 @@ export async function openJob(options: {
       toolExecution: "sequential",
       compaction: { enabled: false },
     },
-    onReport: () => log("The harness reported a problem. No credentials or raw diagnostics were printed."),
+    onReport: (_error, info) => {
+      if (info.type === "task_parked") {
+        log(`Task ${info.task.id} was parked after repeated crashes. Explicit retry is required.`);
+      } else {
+        log("The harness reported a problem. No credentials or raw diagnostics were printed.");
+      }
+    },
   }, BACKGROUND_CONTEXT);
   try {
     const root = await harness.root(BACKGROUND_CONTEXT, options.initial ? {
@@ -115,7 +128,25 @@ export async function openJob(options: {
     const job = await harness.snapshot(JobDoc, root.id, BACKGROUND_CONTEXT);
     if (!job?.sku) throw new UserError("This job has no saved SKU; start a new research job.");
 
-    async function run(): Promise<string> {
+    async function run(recovery?: { retryTaskId: string }): Promise<string> {
+      const inspection = await harness.inspect(BACKGROUND_CONTEXT);
+      const parked = inspection.tasks.filter((task) =>
+        task.record.conversationId === root.id && task.state.kind === "blocked" && task.state.reason === "restart_limit",
+      );
+      if (recovery) {
+        const id = validateTaskId(recovery.retryTaskId);
+        if (!parked.some((task) => task.record.id === id)) {
+          throw new UserError(`Task ${id} is not a parked task in this job. No retry was started.`);
+        }
+        // Durable clears this task's crash counter and starts scheduling. Its
+        // existing submission and tool-task ID (and budget slot) are retained.
+        await harness.retryTask(id, BACKGROUND_CONTEXT);
+      }
+      const remaining = parked.filter((task) => String(task.record.id) !== recovery?.retryTaskId);
+      if (remaining.length) {
+        const commands = remaining.map((task) => `bun run sku retry ${basename(options.directory)} ${task.record.id}`).join("\n");
+        throw new UserError(`Research is parked after repeated crashes without saved progress. Fix the cause before retrying.\n${commands}\nRetry can repeat interrupted model/search requests and consume allowance. Ordinary resume does not unpark tasks.`);
+      }
       // Stable admission key recovers even if the process died before saving a separate submission ID.
       const submission = await root.submit({
         type: "input",
