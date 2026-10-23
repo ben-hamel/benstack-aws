@@ -92,7 +92,8 @@ For research, the model can choose among exactly two tools:
   state, not model input. Returns a clearly labelled OpenAI summary with citations.
 - `fetch_costco_page`: direct product evidence from HTTPS pages on those exact
   hosts (and their `www` aliases). Fetches HTML once, then extracts JSON-LD Product
-  fields plus Costco's named product-details and specifications sections. The saved
+  fields plus Costco's named product-details and specifications sections. Same-Day
+  additionally supports a separately verified item header (details below). The saved
   job SKU, not a model-supplied SKU, selects the product. Other hosts, local paths,
   credentials in URLs and nonstandard ports are rejected. The fetcher enforces
   same-origin redirects and blocks private IPs.
@@ -109,10 +110,40 @@ releasing the full HTML held in the subprocess's memory.
 Unlike article-style readable extraction, this path preserves structured SKU/name
 fields and targeted size/pack evidence. It never executes page scripts, launches a
 browser, or infers missing product attributes. Mismatched, absent, or conflicting
-structured product identities are reported as unresolved; fields from separate
-products are not merged. Pages without JSON-LD Product data or with changed section
-selectors can still lack evidence, including Same-Day pages. Hosted search remains
-a separate, explicitly labelled source.
+product identities are reported as unresolved; fields from separate products are
+not merged. Pages without usable JSON-LD Product data or with changed selectors can
+still lack evidence. Hosted search remains a separate, explicitly labelled source.
+
+### Same-Day item-header evidence
+
+Same-Day pages can omit `sku` from their Product JSON-LD while showing `Item: <SKU>`
+in the product header. On the exact supported Same-Day host, extraction requires:
+- One `#item_details` container, one product heading, and one adjacent item label
+  whose complete numeric SKU matches the saved job.
+- One distinct JSON-LD Product bound to the source page's origin/path, agreeing on
+  the complete product name, with no conflicting structured SKU or declared URL.
+- No malformed/skipped JSON-LD blocks or exhausted structured-inspection limits.
+
+The `sameDayProduct` object keeps header SKU, name, displayed size text, and scoped
+Details paragraphs separate from `structuredProduct`. It never fills in a missing
+JSON-LD SKU. Unrelated item labels, recommendations, URL product IDs, guest/session
+state, and executable scripts cannot supply identity. Header/layout changes fail
+closed rather than falling back to whole-page text.
+
+JSON-LD `size` and the displayed size are retained verbatim, with warnings not to
+reconcile disagreements or turn estimated weight into fixed package weight. Pack
+counts and brands are not inferred. Header size lines can contain quoted prices;
+these are source text, not verified current price or Newfoundland availability.
+
+Page-only validation on October 23, 2026 used public HTTP fetching, not model or
+hosted-search requests. Both original pages failed the old exact-JSON-LD-SKU check.
+After the fix, a fresh MCP fetch of item `55505` recovered the exact header SKU,
+Kirkland whole chicken, three-chicken Details text, and the quoted estimated weight.
+For `27003`, the initial response showed `908 g` in the header but `1 lb container`
+in JSON-LD; the reduced fixture retains both. A fresh post-fix MCP fetch remained
+unresolved, and a separate bounded HTTP diagnostic encountered storefront redirect
+loops. Do not claim that case is live-verified after the fix or that the product is
+unavailable. No full research job was run; broad Same-Day coverage remains unproven.
 
 Response bodies are limited to 5 MiB by the fetcher and checked again before parsing.
 The pinned library's MCP server returns text only; the worker reassembles its bounded
@@ -288,7 +319,9 @@ Offline tests use scripted faux models, fake web results and temporary private
 SQLite storage. They verify recovery, idempotent submission, the tool budget,
 credential serialization/permissions, lack of API-key fallback, URL restrictions,
 MCP argument contracts, hosted-search request/stream handling, and subprocess startup.
-Product-extraction tests use reduced saved-page fixtures and cover SKU selection,
+Product-extraction tests use reduced saved-page fixtures and cover Same-Day header
+binding, contradictory size quotes, estimates, unrelated recommendations, layout
+changes, malformed/limited data, and bounded output, as well as SKU selection,
 malformed/ambiguous data, named product sections, output limits, text-only MCP
 continuation reconstruction, saved-SKU forwarding, and reader cleanup.
 Progress tests cover real committed tool events with faux models, completed-job
