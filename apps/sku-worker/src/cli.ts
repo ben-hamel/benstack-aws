@@ -11,6 +11,7 @@ import { COSTCO_SITES, validateSku } from "./web.ts";
 import { openOpenAIResearchWeb } from "./openai-search.ts";
 import { openJob, validateTaskId } from "./worker.ts";
 import { watchProgress } from "./progress.ts";
+import { formatEvidenceReview } from "./evidence-review.ts";
 
 const HELP = `Local Costco Canada research prototype (Node.js 22.19+)
 
@@ -181,7 +182,7 @@ async function main() {
       await new Promise<void>((resolve) => setImmediate(resolve));
       await progress.stop();
       progress = undefined;
-      console.log(`\nPROPOSED MATCH - REVIEW REQUIRED\n\n${answer}`);
+      console.log(`\n${formatEvidenceReview(await job.review())}\n\nPROPOSED MATCH - REVIEW REQUIRED\n\n${answer}`);
     } finally {
       if (onAbort) signal.removeEventListener("abort", onAbort);
       // Close preserves unfinished work. Do not call abort(), which cancels it permanently.

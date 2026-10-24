@@ -185,6 +185,45 @@ tool names, or raw provider diagnostics. This is status visibility, not a token,
 cost, or hosted-search-call meter. Implementation reference:
 [upstream 1.4.0 JSON event example](https://github.com/earendil-works/pi/blob/v1.4.0/packages/durable/test/examples/19-json.ts).
 
+## Saved evidence review
+
+New jobs save an evidence-coverage summary in a separate Durable document, tied to
+that job's final answer entry. The CLI prints it before the proposed answer:
+
+```text
+Job: done
+Evidence: direct SKU match
+Review flags:
+- JSON-LD and displayed size text differ; compare the quotes manually.
+- Pack count and final-answer claims are not automatically checked.
+Human review required. This checks evidence coverage, not identification correctness.
+```
+
+`done` still means an answer was saved, not that the product identification is
+correct. Evidence status is `direct SKU match`, `search-only`, or `unresolved`.
+It comes from committed tool results, not the model's confidence or answer text.
+A direct match requires the extractor's exact-SKU identity, matching requested SKU,
+product name, and supported source URL (including the separately verified Same-Day
+header path). Fetch errors and unverified/malformed page results remain review flags,
+even when another page establishes a direct match.
+
+Rules flag missing brands on matched extracts, different Same-Day JSON-LD/displayed
+size strings, and approximation words in Same-Day displayed sizes. Different strings
+are **not** a proven size conflict: no unit conversion or semantic comparison is
+performed. Price text can itself make the strings different. Size evidence elsewhere,
+pack count, and the final answer's claims are not comprehensively validated. Every
+summary requires human review; there is no automatic approval, correctness score,
+reviewer model, or automatic extra research.
+
+Assessment scans at most 2,048 committed entries through the saved answer. Reaching
+the limit forces `unresolved` with an incomplete-history flag. Only fixed flags,
+counts, a rule version and the answer entry ID are saved in the summary; no extra
+raw HTML or diagnostics are copied. Reopening a completed job reuses its summary
+without research. If an answer was saved before its assessment committed, resume
+can finish assessment from saved evidence without new model/search calls.
+Jobs created before this feature have no opt-in document and show **not assessed**;
+the worker does not silently backfill or approve them.
+
 ## Stop and resume
 
 Research prints a job UUID before it starts. Press **Ctrl+C** to close the harness
@@ -329,6 +368,9 @@ reopening, listener cleanup, payload suppression, and pause/recovery with an
 attached observer. Recovery tests kill temporary subprocesses during faux model
 and search execution five times, verify real crash-loop parking, and check explicit
 retry, invalid targets, stable submission identity, and tool-budget preservation.
+Evidence-review tests cover direct matches, search-only answers, different size
+quotes, estimates, failed/unverified pages, partial history, persisted summaries,
+resume/recomputation without new research, and legacy jobs remaining unassessed.
 They make no model or web-search requests. `search-test` is the separate live search check. End-to-end ChatGPT login
 and inference require your consent and are not claimed verified by offline tests.
 

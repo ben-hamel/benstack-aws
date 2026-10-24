@@ -2,12 +2,13 @@ import type { Models } from "@earendil-works/pi-ai/models";
 import { Type } from "@earendil-works/pi-ai";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import {
-  AssistantEntry, createRegistry, defineDoc, defineExtension, defineTool, Harness, type TaskId,
+  AssistantEntry, createRegistry, defineDoc, defineExtension, defineTool, Harness, type TaskId, type Cursor, type EntryRecord,
 } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { basename, join } from "node:path";
 import { privateDirectory, UserError } from "./state.ts";
 import { COSTCO_SITES, type ResearchWeb, validateSku } from "./web.ts";
+import { assessEvidence, EvidenceReviewDoc } from "./evidence-review.ts";
 
 export const MAX_TOOL_CALLS = 12;
 
@@ -126,6 +127,7 @@ export async function openJob(options: {
         const job = await tx.doc(JobDoc, id);
         job.sku = validateSku(options.initial!.sku);
         job.model = options.initial!.model;
+        await tx.doc(EvidenceReviewDoc, id);
       },
     } : undefined);
     const job = await harness.snapshot(JobDoc, root.id, BACKGROUND_CONTEXT);
@@ -172,9 +174,26 @@ export async function openJob(options: {
         message.role === "assistant" ? message.content.flatMap((block) => block.type === "text" ? [block.text] : []) : [],
       ).join("\n");
       if (!answer) throw new UserError("The model returned no text. The transcript is saved.");
+      const review = await harness.snapshot(EvidenceReviewDoc, root.id, BACKGROUND_CONTEXT);
+      if (review && review.summary?.answerId !== settled.answer) {
+        // Assess committed tool results only. If close interrupts this extra
+        // commit, the new-job marker lets the next resume finish assessment.
+        const entries: EntryRecord[] = [];
+        let cursor: Cursor | undefined;
+        do {
+          const page = await root.entries({ order: "ascending", maxEntryId: settled.answer }, 256, cursor, BACKGROUND_CONTEXT);
+          entries.push(...page.items);
+          cursor = page.next;
+        } while (cursor && entries.length < 2_048);
+        const summary = assessEvidence(entries, job!.sku, settled.answer, cursor === undefined);
+        await root.commit(async (tx) => {
+          (await tx.doc(EvidenceReviewDoc, root.id)).summary = summary;
+        }, BACKGROUND_CONTEXT);
+      }
       return answer;
     }
-    return { harness, root, job, run, close: () => harness.close(BACKGROUND_CONTEXT) };
+    const review = async () => (await harness.snapshot(EvidenceReviewDoc, root.id, BACKGROUND_CONTEXT))?.summary ?? null;
+    return { harness, root, job, run, review, close: () => harness.close(BACKGROUND_CONTEXT) };
   } catch (error) {
     await harness.close(BACKGROUND_CONTEXT);
     throw error;

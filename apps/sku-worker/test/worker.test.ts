@@ -195,6 +195,7 @@ test("an interrupted read-only search resumes with progress and keeps the origin
   const resumedProgress = await watchProgress(second.harness, second.root.id, () => undefined);
   try {
     assert.equal(await second.run(), "Recovered match for SKU 1572430.");
+    assert.equal((await second.review())?.status, "search_only");
     assert.equal(replays, 1);
     const job = await second.harness.snapshot(JobDoc, second.root.id, BACKGROUND_CONTEXT);
     assert.equal(job?.toolTasks.length, 1, "replay must not consume another budget slot");
