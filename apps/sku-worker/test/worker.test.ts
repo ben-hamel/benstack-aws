@@ -204,6 +204,35 @@ test("an interrupted read-only search resumes with progress and keeps the origin
   } finally { await resumedProgress.stop(); await second.close(); }
 });
 
+test("a gracefully paused model request resumes even with automatic model retries disabled", { timeout: 5_000 }, async (t) => {
+  const directory = await temporary(t);
+  const { faux, models, model } = fakeModels();
+  let started!: () => void;
+  const ready = new Promise<void>((resolve) => { started = resolve; });
+  faux.setResponses([async (_request, context) => {
+    started();
+    await new Promise<void>((resolve) => {
+      if (context?.signal?.aborted) resolve();
+      else context?.signal?.addEventListener("abort", () => resolve(), { once: true });
+    });
+    return fauxAssistantMessage("", { stopReason: "aborted" });
+  }]);
+  const first = await openJob({ directory, models, web: fakeWeb(), initial: { sku: "1572430", model } });
+  const running = first.run().catch(() => undefined);
+  await ready;
+  await first.close();
+  await running;
+
+  faux.setResponses([fauxAssistantMessage("Resumed model answer for review.")]);
+  const second = await openJob({ directory, models, web: fakeWeb() });
+  try {
+    assert.equal(await second.run(), "Resumed model answer for review.");
+    assert.equal(await second.run(), "Resumed model answer for review.");
+    const view = await second.root.context(BACKGROUND_CONTEXT);
+    assert.equal(view.entries.filter((entry) => entry.kind === "pi.user").length, 1);
+  } finally { await second.close(); }
+});
+
 test("an unsupported subscription model reports an actionable error without raw provider details", async (t) => {
   const directory = await temporary(t);
   const { faux, models, model } = fakeModels();

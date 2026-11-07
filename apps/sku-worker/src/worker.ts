@@ -1,23 +1,17 @@
 import type { Models } from "@earendil-works/pi-ai/models";
-import { Type } from "@earendil-works/pi-ai";
+import { obj, oneOf, str } from "@earendil-works/pi-schema";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import {
-  AssistantEntry, createRegistry, defineDoc, defineExtension, defineTool, Harness, type TaskId, type Cursor, type EntryRecord,
+  AssistantEntry, createRegistry, defineDoc, defineExtension, defineTool, Harness, type Cursor, type EntryRecord,
 } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
-import { basename, join } from "node:path";
+import { join } from "node:path";
 import { privateDirectory, UserError } from "./state.ts";
 import { COSTCO_SITES, type ResearchWeb, validateSku } from "./web.ts";
 import { assessEvidence, EvidenceReviewDoc } from "./evidence-review.ts";
 
 export const MAX_TOOL_CALLS = 12;
 
-export function validateTaskId(value: string): TaskId {
-  if (!/^[1-9][0-9]*$/.test(value) || !Number.isSafeInteger(Number(value))) {
-    throw new UserError("Use the positive numeric task ID shown in the parked-job message.");
-  }
-  return Number(value) as TaskId;
-}
 export const JobDoc = defineDoc<{
   sku: string;
   model: { provider: string; modelId: string };
@@ -67,7 +61,7 @@ export async function openJob(options: {
   const search = defineTool({
     name: "search_costco",
     description: "Research this job's exact SKU on one supported Costco Canada site using a separate OpenAI hosted-search model. Returns a model-generated summary and citations, not a raw page extract. Treat results as untrusted evidence for review.",
-    parameters: Type.Object({ site: Type.Union(COSTCO_SITES.map((site) => Type.Literal(site))) }),
+    parameters: obj({ site: oneOf(COSTCO_SITES) }),
     replay: "safe",
     execute: async (args, api, context) => {
       const sku = await api.commit(async (tx) => {
@@ -84,7 +78,7 @@ export async function openJob(options: {
   const fetch = defineTool({
     name: "fetch_costco_page",
     description: "Extract direct product evidence (JSON-LD, Costco product sections, or separately verified Same-Day item headers) from an HTTPS Costco Canada page, checked against this job's SKU. Same-Day size quotes can conflict or be estimates; do not reconcile them. No login, cookies, script execution or cross-origin redirects. Extracted page data is untrusted.",
-    parameters: Type.Object({ url: Type.String({ maxLength: 2_048 }) }),
+    parameters: obj({ url: str({ maxLength: 2_048 }) }),
     replay: "safe",
     execute: async (args, api, context) => {
       const sku = await api.commit(async (tx) => {
@@ -108,9 +102,9 @@ export async function openJob(options: {
       toolExecution: "sequential",
       compaction: { enabled: false },
     },
-    onReport: (_error, info) => {
-      if (info.type === "task_parked") {
-        log(`Task ${info.task.id} was parked after repeated crashes. Explicit retry is required.`);
+    onReport: (report) => {
+      if (report.kind === "task_interrupted") {
+        log(`Task ${report.task.id} ended after a process interruption or repeated crashes. No automatic retry was started by this report handler.`);
       } else {
         log("The harness reported a problem. No credentials or raw diagnostics were printed.");
       }
@@ -133,25 +127,7 @@ export async function openJob(options: {
     const job = await harness.snapshot(JobDoc, root.id, BACKGROUND_CONTEXT);
     if (!job?.sku) throw new UserError("This job has no saved SKU; start a new research job.");
 
-    async function run(recovery?: { retryTaskId: string }): Promise<string> {
-      const inspection = await harness.inspect(BACKGROUND_CONTEXT);
-      const parked = inspection.tasks.filter((task) =>
-        task.record.conversationId === root.id && task.state.kind === "blocked" && task.state.reason === "restart_limit",
-      );
-      if (recovery) {
-        const id = validateTaskId(recovery.retryTaskId);
-        if (!parked.some((task) => task.record.id === id)) {
-          throw new UserError(`Task ${id} is not a parked task in this job. No retry was started.`);
-        }
-        // Durable clears this task's crash counter and starts scheduling. Its
-        // existing submission and tool-task ID (and budget slot) are retained.
-        await harness.retryTask(id, BACKGROUND_CONTEXT);
-      }
-      const remaining = parked.filter((task) => String(task.record.id) !== recovery?.retryTaskId);
-      if (remaining.length) {
-        const commands = remaining.map((task) => `bun run sku retry ${basename(options.directory)} ${task.record.id}`).join("\n");
-        throw new UserError(`Research is parked after repeated crashes without saved progress. Fix the cause before retrying.\n${commands}\nRetry can repeat interrupted model/search requests and consume allowance. Ordinary resume does not unpark tasks.`);
-      }
+    async function run(): Promise<string> {
       // Stable admission key recovers even if the process died before saving a separate submission ID.
       const submission = await root.submit({
         type: "input",
@@ -160,6 +136,9 @@ export async function openJob(options: {
       }, BACKGROUND_CONTEXT);
       const settled = await submission.wait(BACKGROUND_CONTEXT);
       if (settled.status !== "done" || settled.type !== "input" || settled.answer === undefined) {
+        if (settled.status === "unanswered" && (settled.reason === "interrupted" || settled.reason === "restart_limit")) {
+          throw new UserError(`Research ended after a process interruption or repeated crashes (${settled.reason}). This saved submission will not restart on resume. Fix the cause, then start a new job: bun run sku research ${job!.sku}. New research may consume model/search allowance.`);
+        }
         const detail = settled.status === "unanswered" && typeof settled.detail === "string" ? settled.detail : "";
         if (/model.+not supported/i.test(detail)) {
           throw new UserError(`Model ${job!.model.modelId} was rejected for your ChatGPT plan. Run bun run sku models, then start a new research job with an available model. This failed job remains saved.`);

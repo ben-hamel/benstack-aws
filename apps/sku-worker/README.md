@@ -1,6 +1,6 @@
 # Local SKU research prototype
 
-A standalone CLI worker for Costco Canada, using Pi Durable 1.4.0, a separate
+A standalone CLI worker for Costco Canada, using Pi Durable 1.5.0, a separate
 ChatGPT plan-use login, and OpenAI hosted web search. Optional direct page reading
 uses `pi-web-access`'s standalone MCP server; new research no longer calls Exa.
 It does not import Benstack's environment, connect to Postgres, change the existing
@@ -168,22 +168,25 @@ release-age policy; we did not bypass that policy to install 0.42.0.
 
 ## Progress output
 
-`research` and `resume` observe Pi Durable's committed `watchEvents()` stream,
-attached before submitting work. Fixed `[progress]` messages on **stderr** show
-model turns, Costco search/page-reader starts and finishes, and run boundaries.
-A finished tool or ended run is not a claim that research succeeded; the saved
-submission and final answer remain authoritative.
+`research` and `resume` watch Pi Durable's bounded conversation view via
+`conversation.watch()`, attached before submitting work. Fixed `[progress]` messages
+on **stderr** show observed model turns, Costco search/page-reader starts and
+finishes, run failures, and run boundaries. A finished tool or ended run is not a
+claim that research succeeded; the saved submission and final answer remain authoritative.
 
-The initial snapshot reflects saved activity; reopening a completed job does not
-replay historical progress or start research again. Slow observers can receive a
-replacement snapshot instead of every intermediate event. On pause or exit the
-observer is detached without cancelling the durable job. The final answer is
-printed once on **stdout**, not streamed through progress messages.
+The initial view reflects saved activity; reopening a completed job does not replay
+historical progress or start research again. Watches fold intermediate changes, so
+transient states can be missed. Newly appended tool-result entries also supply
+completion status when a tool's live slot is already gone. On pause or exit the
+watch is stopped without cancelling the durable job. The final answer is printed
+once on **stdout**, not streamed through progress messages. Live partial output can
+be shown before its deferred SQLite write (up to about one second by default);
+final answers and tool results are persisted before their submissions settle.
 
 Progress never prints message/thinking deltas, tool arguments/results, arbitrary
 tool names, or raw provider diagnostics. This is status visibility, not a token,
 cost, or hosted-search-call meter. Implementation reference:
-[upstream 1.4.0 JSON event example](https://github.com/earendil-works/pi/blob/v1.4.0/packages/durable/test/examples/19-json.ts).
+[upstream 1.5.0 JSON view example](https://github.com/earendil-works/pi/blob/v1.5.0/packages/durable/test/examples/18-json.ts).
 
 ## Saved evidence review
 
@@ -236,9 +239,11 @@ bun run sku resume <job-id>
 Each job has its own SQLite transcript and saved SKU/model/tool budget. A stable
 request ID prevents duplicate user submissions when reopened. A completed job
 prints its saved answer without another inference request (account model discovery
-still makes an authenticated GET). An unfinished job recovers
-from committed progress; an interrupted model request may be sent again, and an
-interrupted read-only search/fetch may repeat. Search-provider quota and model
+still makes an authenticated GET). An unfinished job recovers from persisted
+progress. A gracefully closed model request may be sent again, and an interrupted
+read-only search/fetch may repeat. A hard crash during a model request instead
+counts as a failed attempt in 1.5.0; because this worker disables automatic model
+retries, that run ends `unanswered` with reason `interrupted` rather than resending. Search-provider quota and model
 allowance may therefore be consumed again. Nothing here guarantees exactly-once
 external requests or survival of every last write after host power loss. Resume uses
 the currently installed search adapter; completed jobs keep their cached answer.
@@ -254,50 +259,55 @@ One command owns the local worker state at a time. After a hard crash, allow abo
 10 seconds for the stale lock to clear. Keep these files on a persistent local disk;
 container replacement would require an explicit persistence design.
 
-## Parked-task recovery
+## Crash-loop recovery
 
-After five consecutive crashes without saved task progress, Pi Durable parks the
-task instead of restarting it indefinitely. `resume` detects parked tasks before
-starting research and exits with the exact job/task retry command instead of
-waiting for the five-minute limit. Harness reports also identify parked task IDs;
-raw error payloads are not printed.
+Pi Durable 1.5.0 no longer parks tasks and removed `harness.retryTask()`. After five
+consecutive crashes without saved tool progress, a read-only tool ends with a
+`restart_limit` error result instead of executing again. The model can still answer
+from the error and any saved evidence; completion is not proof of a successful lookup.
+Replaying a tool before that limit retains its original budget slot.
 
-First investigate/fix the cause (for example, a repeatable process crash or resource
-limit). Then explicitly retry the numeric task ID shown in the message:
+A hard crash during a model request ends the run `interrupted` with this worker's
+no-model-retry policy. A run that itself hits the restart limit also ends. `resume`
+reports these terminal outcomes without submitting more work or exposing raw
+provider diagnostics. First fix the crash/resource cause, then explicitly start a
+new `research <sku>` job if needed. **New research can consume model/search allowance
+and has a new tool budget.** Saved answers/transcripts remain in the old job.
 
-```bash
-bun run sku retry <job-id> <task-id>
-```
-
-This clears that task's crash counter via `harness.retryTask()` and continues the
-same saved job/submission with normal progress output, Ctrl+C pause, five-minute
-invocation limit, and persistent tool budget. It does not create a new research job
-or reset the budget. Replaying the same tool task keeps its existing budget slot.
-Only a currently parked task belonging to that job can be retried: missing,
-completed, or non-parked task IDs are rejected rather than silently resumed.
-If other tasks remain parked, the worker prints their retry commands too.
-
-**Retry can repeat interrupted model/search/page requests and consume allowance.**
-There is no automatic retry of parked tasks. This is not a general retry for jobs
-already settled as `unanswered`, nor a fix for the cause of a crash. Ordinary
-Ctrl+C pause/resume does not need this command. Like `resume`, `retry` requires the
-worker login, checks the account model catalog, and can migrate legacy SQLite state.
+The obsolete `retry <job-id> <task-id>` command now fails with migration guidance
+before authentication, model discovery, or opening any job. Ordinary Ctrl+C pause
+and `resume` still work and do not require this command.
 
 ## Pi Durable upgrades
 
-Pi Durable, Pi AI, and Chord are pinned together to **1.4.0**. This upgrade added
-an explicit `checkpointWhen` policy to the worker's document definition. The
-upstream API is experimental; review release notes before changing these pins.
+Pi Durable, Pi AI, Chord, and Pi Schema are pinned together to **1.5.0**. The worker
+uses Pi Schema tool definitions, tagged harness reports, and conversation-view
+watches instead of the removed event stream. Crash-loop handling follows the new
+terminal-outcome policy above. The upstream API is **experimental**, not stable;
+review release notes before changing these pins.
 
-**SQLite migration is automatic and one-way:** opening a 1.3.0 job with 1.4.0
-migrates its database from schema v1 to v2. Version 1.3.0 cannot reopen it afterward.
+**Back up before opening old jobs.** Version 1.5.0 keeps SQLite schema v2 but
+migrates built-in document/task versions when used; 1.4.0 cannot safely resume state
+written by the newer harness. Opening a 1.3.0 job also automatically migrates its
+database from SQLite schema v1 to v2, which 1.3.0 cannot reopen.
 Before running `research` or `resume` against existing state after upgrading, stop
 all worker processes and back up the jobs using SQLite's backup API (or copy each
 closed database together with any remaining WAL files). Keep backups outside Git.
 A rollback requires both the old dependencies and an unmigrated database backup.
 The upgrade does not proactively migrate saved jobs; opening one does.
 
-Upgrade validation on October 23, 2026:
+1.5.0 migration validation:
+- Type checking and all 49 offline tests passed, including real SIGKILL recovery,
+  graceful model/search pause and resume, stable submission/budget identity,
+  completed-job reuse, fixed-label view progress, and obsolete CLI retry rejection.
+- The existing SQLite schema v1-to-v2 preservation test still passes.
+- No live login, model/search/page requests, or original saved-job migration was
+  performed for this upgrade. Legacy built-in task/document migration is not
+  comprehensively covered by the schema preservation test.
+- Dependency/lockfile updates were already present when this migration was finished;
+  no install or release-age override was needed during completion.
+
+Historical 1.4.0 upgrade validation on October 23, 2026:
 - Type checking and all 30 offline tests passed, including schema v1-to-v2 task-row
   preservation and the existing interrupted-search recovery test on 1.4.0.
 - Copies of all 13 saved v1 jobs migrated and reopened successfully: 11 retained
@@ -315,9 +325,8 @@ Upgrade validation on October 23, 2026:
   release-age policy in `bunfig.toml` remains unchanged. Do not routinely use the
   override.
 
-Version 1.4.0 also parks tasks after five consecutive crash recoveries without a
-new checkpoint. See parked-task recovery below. Graceful close/resume is not
-counted as a crash.
+Version 1.4.0 used parked tasks after five crash recoveries. That behavior and its
+retry command are superseded by 1.5.0's crash-loop recovery above.
 
 ## Local state and logout
 
@@ -363,11 +372,13 @@ binding, contradictory size quotes, estimates, unrelated recommendations, layout
 changes, malformed/limited data, and bounded output, as well as SKU selection,
 malformed/ambiguous data, named product sections, output limits, text-only MCP
 continuation reconstruction, saved-SKU forwarding, and reader cleanup.
-Progress tests cover real committed tool events with faux models, completed-job
-reopening, listener cleanup, payload suppression, and pause/recovery with an
-attached observer. Recovery tests kill temporary subprocesses during faux model
-and search execution five times, verify real crash-loop parking, and check explicit
-retry, invalid targets, stable submission identity, and tool-budget preservation.
+Progress tests cover conversation-view updates with faux models, folded tool
+completions, completed-job reopening, listener cleanup, payload suppression, and
+pause/recovery with an attached watch. Recovery tests SIGKILL temporary subprocesses
+once during a faux model request and five times during search, verifying terminal
+interruption/restart-limit handling, stable submission identity, and tool-budget
+preservation. Graceful model and search pause/resume remain separately tested.
+CLI tests check obsolete retry rejection before state access and updated help.
 Evidence-review tests cover direct matches, search-only answers, different size
 quotes, estimates, failed/unverified pages, partial history, persisted summaries,
 resume/recomputation without new research, and legacy jobs remaining unassessed.

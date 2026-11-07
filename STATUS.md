@@ -1,6 +1,44 @@
 # Where I left off: local Durable SKU worker
 
-Updated: 2026-10-23
+Updated: 2026-11-07
+
+## Latest checkpoint: Pi Durable 1.5.0 migration
+
+Completed the partial 1.5.0 upgrade already present in the working tree:
+- Pi Durable, Pi AI, Chord, and Pi Schema are pinned together to 1.5.0.
+- Tool definitions use Pi Schema, and harness reports use the tagged report API.
+- Progress now watches bounded conversation views, not the removed `watchEvents()`
+  API. It emits fixed labels only, deduplicates live/result completion updates,
+  and does not replay old progress when reopening a completed job.
+- Removed parked-task recovery and `retryTask()`. The obsolete CLI `retry` command
+  now rejects with guidance before authentication/network discovery/state access.
+- Hard crashes during a model request settle `unanswered` as `interrupted` with
+  our disabled-model-retry policy. Five crashes during a read-only tool end that
+  tool with a `restart_limit` result; the model can still answer from saved evidence.
+- Graceful Ctrl+C/close and resume remain supported for model and search work.
+  Failed submissions are not silently restarted; fix the cause and explicitly
+  start new research if needed. Completed jobs reuse their saved answer/review.
+
+Validation: type checking and all 49 offline tests passed, including real SIGKILL
+fixtures, graceful pause/recovery, stable input/budget identity, safe progress,
+obsolete CLI rejection, and SQLite schema migration preservation. No live model,
+search, page, login, or original saved-job migration was performed. No dependency
+installation or release-age override was needed to finish the existing upgrade.
+
+**Before using existing jobs:** stop workers and back up closed SQLite databases
+and any WAL files. Built-in document/task upgrades can make rollback to 1.4.0
+unsafe even though SQLite remains schema v2. The schema-preservation test is not
+comprehensive legacy built-in-state migration coverage. See
+`apps/sku-worker/README.md` for current usage and upgrade notes.
+
+No deployment or infrastructure changes. Implementation and offline validation are
+complete. The broader product decision remains whether to stop at the local
+prototype or expand coverage.
+
+---
+
+The remaining sections are the historical October 23 prototype checkpoint, not
+current upgrade instructions.
 
 ## Goal
 
