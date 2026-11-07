@@ -2,7 +2,26 @@
 
 Updated: 2026-11-07
 
-## Latest checkpoint: Pi Durable 1.5.0 migration
+## Latest checkpoint: receipt-triggered production specification
+
+Specification: `docs/specs/receipt-product-research.md`.
+
+The agreed user workflow is automatic research after receipt import, with explicit
+human approval before product metadata is applied. No per-SKU terminal command
+should be required. The draft grounds this in both existing receipt import paths,
+identifies the missing catalog/review schemas and unsafe nontransactional import
+boundary, and specifies deduplication, scoped approval, UI, hosting, spending
+controls, recovery, implementation phases, and acceptance checks.
+
+Technical defaults in the spec are recommendations for one-pass review, not
+previously approved decisions. Provider/service credentials and monetary/infrastructure
+budgets remain launch gates. Start implementation with transactional shared import
+and admission, not deployment. The draft does not authorize paid requests, migrations,
+or infrastructure changes. Spec writing changed documentation only; no runtime
+validation was needed or claimed. The user authorized starting Phase 1 on November 7;
+paid calls, production migrations, and deployment remain gated.
+
+## Previous checkpoint: Pi Durable 1.5.0 migration
 
 Completed the partial 1.5.0 upgrade already present in the working tree:
 - Pi Durable, Pi AI, Chord, and Pi Schema are pinned together to 1.5.0.
