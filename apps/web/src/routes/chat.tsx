@@ -1,5 +1,5 @@
 import { env } from "@benstack-aws/env/web";
-import { DefaultChatTransport } from "ai";
+import { DefaultChatTransport, generateId } from "ai";
 import { useChat } from "@ai-sdk/react";
 import type { UIMessage } from "ai";
 import { createFileRoute, redirect } from "@tanstack/react-router";
@@ -14,47 +14,20 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@benstack-aws/ui/components/dropdown-menu";
-import {
-  Conversation,
-  ConversationContent,
-  ConversationScrollButton,
-} from "@benstack-aws/ui/components/ai-elements/conversation";
-import {
-  Message,
-  MessageContent,
-  MessageResponse,
-} from "@benstack-aws/ui/components/ai-elements/message";
-import {
-  Tool,
-  ToolContent,
-  ToolHeader,
-  ToolInput,
-  ToolOutput,
-} from "@benstack-aws/ui/components/ai-elements/tool";
-import {
-  InlineCitation,
-  InlineCitationCard,
-  InlineCitationCardBody,
-  InlineCitationSource,
-} from "@benstack-aws/ui/components/ai-elements/inline-citation";
-import { Suggestion, Suggestions } from "@benstack-aws/ui/components/ai-elements/suggestion";
-import { HoverCardTrigger } from "@benstack-aws/ui/components/hover-card";
+import { ChatMessage } from "@/components/chat/chat-message";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@benstack-aws/ui/components/hover-card";
 import { Button } from "@benstack-aws/ui/components/button";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupTextarea } from "@benstack-aws/ui/components/input-group";
-import { MessageScrollerItem } from "@benstack-aws/ui/components/message-scroller";
+import {
+  MessageScroller, MessageScrollerProvider, MessageScrollerViewport,
+  MessageScrollerContent, MessageScrollerItem, MessageScrollerButton,
+} from "@benstack-aws/ui/components/message-scroller";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@benstack-aws/ui/components/dialog";
-
-const TOOL_TITLES: Record<string, string> = {
-  get_spending_summary: "Spending Summary",
-  search_items: "Search Items",
-  get_top_items: "Top Items",
-  get_receipts: "Receipts",
-};
 
 export const Route = createFileRoute("/chat")({
   component: RouteComponent,
@@ -95,7 +68,7 @@ function formatReceiptDate(dateStr: string) {
 
 function toUIMessages(records: MessageRecord[]): UIMessage[] {
   return records.map((m) => ({
-    id: crypto.randomUUID(),
+    id: generateId(),
     role: m.role,
     parts: [{ type: "text" as const, text: m.content }],
   }));
@@ -398,9 +371,15 @@ function ChatSession({
     prevStatus.current = status;
   }, [status, chatId, messages.length, onStreamEnd]);
 
+  const busy = status === "submitted" || status === "streaming";
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const text = draft.trim();
+    await sendPrompt(draft);
+  }
+
+  async function sendPrompt(prompt: string) {
+    const text = prompt.trim();
     if (!text || status !== "ready") return;
     setDraft("");
     onMessageSent(chatId);
@@ -409,85 +388,57 @@ function ChatSession({
 
   return (
     <div className="grid h-full grid-rows-[1fr_auto]">
-      <Conversation>
-        <ConversationContent className="mx-auto w-full max-w-3xl">
-          {error && (
-            <div className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error.message}
-            </div>
-          )}
-
-          {messages.length > 0 && (
-            <>
-            {messages.map((message) => (
-              <MessageScrollerItem key={message.id} messageId={message.id} scrollAnchor={message.role === "user"} className="space-y-2">
-                {message.parts.map((part, index) => {
-                  if (part.type === "text") {
-                    return (
-                      <Message key={`${message.id}-${index}`} from={message.role}>
-                        <MessageContent>
-                          <MessageResponse>{part.text}</MessageResponse>
-                        </MessageContent>
-                      </Message>
-                    );
-                  }
-
-                  if (part.type === "dynamic-tool") {
-                    return (
-                      <div key={`${message.id}-${index}`} className="space-y-2">
-                        <Tool
-                          defaultOpen={part.state === "output-available" || part.state === "output-error"}
-                        >
-                          <ToolHeader
-                            type="dynamic-tool"
-                            state={part.state}
-                            toolName={part.toolName}
-                            title={TOOL_TITLES[part.toolName] ?? part.toolName}
-                          />
-                          <ToolContent>
-                            <ToolInput input={part.input} />
-                            <ToolOutput output={part.output} errorText={part.errorText} />
-                          </ToolContent>
-                        </Tool>
-                        {part.toolName === "get_receipts" && !!part.output && (
-                          <ReceiptChips output={part.output} />
-                        )}
-                      </div>
-                    );
-                  }
-
-                  return null;
-                })}
-              </MessageScrollerItem>
-            ))}
-            {status === "submitted" && <ThinkingIndicator />}
-            </>
-          )}
-        </ConversationContent>
-        <ConversationScrollButton />
-      </Conversation>
+      <MessageScrollerProvider autoScroll>
+        <MessageScroller role="log" aria-label="Conversation">
+          <MessageScrollerViewport>
+            <MessageScrollerContent className="mx-auto w-full max-w-3xl gap-6 p-4" aria-busy={busy}>
+              {error && (
+                <div role="alert" className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  {error.message}
+                </div>
+              )}
+              {messages.map((message) => (
+                <MessageScrollerItem key={message.id} messageId={message.id} scrollAnchor={message.role === "user"}>
+                  <ChatMessage
+                    message={message}
+                    streaming={status === "streaming" && message.id === messages.at(-1)?.id}
+                    renderReceipts={(output) => <ReceiptChips output={output} />}
+                  />
+                </MessageScrollerItem>
+              ))}
+              {status === "submitted" && (
+                <MessageScrollerItem messageId={chatId + "-thinking"}><ThinkingIndicator /></MessageScrollerItem>
+              )}
+            </MessageScrollerContent>
+          </MessageScrollerViewport>
+          <MessageScrollerButton />
+        </MessageScroller>
+      </MessageScrollerProvider>
 
       <div className="mx-auto w-full max-w-3xl px-4 py-3">
         {messages.length === 0 && (
           <div className="mb-3 overflow-hidden">
-            <Suggestions>
+            <div className="flex scroll-fade-x scrollbar-none gap-2 overflow-x-auto overscroll-x-contain">
               {[
                 "What was my most expensive trip?",
                 "How much did I spend this month?",
                 "What do I buy most often?",
                 "Show me my recent receipts",
                 "How much have I saved in total?",
-              ].map((s) => (
-                <Suggestion
-                  key={s}
-                  suggestion={s}
-                  onClick={(text) => {
-                    setDraft(text);
-                    setTimeout(() => formRef.current?.requestSubmit(), 0);
-                  }}
-                />
+              ].map((suggestion) => (
+                <Button
+                  key={suggestion}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  disabled={status !== "ready"}
+                  onClick={() => void sendPrompt(suggestion)}
+                >
+                  {suggestion}
+                </Button>
               ))}
-            </Suggestions>
+            </div>
           </div>
         )}
         <form ref={formRef} onSubmit={handleSubmit}>
@@ -559,33 +510,28 @@ function ReceiptChips({ output }: { output: unknown }) {
     <>
       <div className="flex flex-wrap gap-2 pb-2">
         {rows.map((row) => (
-          <InlineCitation key={row.id}>
-            <InlineCitationCard>
-              <HoverCardTrigger
-                delay={10}
-                closeDelay={100}
-                render={<Button type="button" variant="secondary" size="xs" className="cursor-pointer gap-1" onClick={() => setSelectedId(row.id)} />}
-              >
-                <ReceiptTextIcon className="h-3 w-3" />
-                {row.store ?? "Unknown"} · {formatReceiptDate(row.date)} · {formatCurrency(row.total)}
-              </HoverCardTrigger>
-              <InlineCitationCardBody>
-                <div className="p-4">
-                  <InlineCitationSource
-                    title={`${row.store ?? "Unknown Store"}${row.city ? `, ${row.city}` : ""}`}
-                    description={`${formatReceiptDate(row.date)} · ${formatCurrency(row.total)}${row.savings && Number.parseFloat(row.savings) > 0 ? ` · Saved ${formatCurrency(row.savings)}` : ""}`}
-                  />
-                  <button
-                    type="button"
-                    className="mt-3 text-xs text-primary hover:underline"
-                    onClick={() => setSelectedId(row.id)}
-                  >
-                    View full receipt →
-                  </button>
-                </div>
-              </InlineCitationCardBody>
-            </InlineCitationCard>
-          </InlineCitation>
+          <HoverCard key={row.id}>
+            <HoverCardTrigger
+              delay={10}
+              closeDelay={100}
+              render={<Button type="button" variant="secondary" size="xs" className="cursor-pointer gap-1" onClick={() => setSelectedId(row.id)} />}
+            >
+              <ReceiptTextIcon className="h-3 w-3" />
+              {row.store ?? "Unknown"} · {formatReceiptDate(row.date)} · {formatCurrency(row.total)}
+            </HoverCardTrigger>
+            <HoverCardContent className="w-80 p-4">
+              <h4 className="text-sm font-medium leading-tight">
+                {row.store ?? "Unknown Store"}{row.city ? `, ${row.city}` : ""}
+              </h4>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {formatReceiptDate(row.date)} · {formatCurrency(row.total)}
+                {row.savings && Number.parseFloat(row.savings) > 0 ? ` · Saved ${formatCurrency(row.savings)}` : ""}
+              </p>
+              <Button type="button" variant="link" size="sm" className="mt-3 px-0" onClick={() => setSelectedId(row.id)}>
+                View full receipt →
+              </Button>
+            </HoverCardContent>
+          </HoverCard>
         ))}
       </div>
 
