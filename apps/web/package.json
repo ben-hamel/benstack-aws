@@ -26,6 +26,7 @@
     "@tanstack/react-router": "^1.170.46",
     "ai": "^6.0.329",
     "better-auth": "catalog:",
+    "katex": "~0.18.11",
     "lucide-react": "catalog:",
     "next-themes": "catalog:",
     "react": "catalog:",
