@@ -8,6 +8,7 @@
     "build:web-function": "bun --no-env-file scripts/build-web-function.ts",
     "dev:web-function": "bun --no-env-file scripts/build-web-function.ts && bun --no-env-file scripts/dev-web-function.ts",
     "test:web-function": "bun --no-env-file scripts/build-web-function.ts && bun --no-env-file test test/web-function.test.ts",
+    "test:auth": "bun --no-env-file test --timeout 60000 test/auth-integration.test.ts",
     "check-types": "tsc -b",
     "compile": "bun build --compile --minify --sourcemap --bytecode ./src/index.ts --outfile server",
     "dev": "bun run --hot src/index.ts",
@@ -36,8 +37,12 @@
   },
   "devDependencies": {
     "@benstack-aws/config": "workspace:*",
+    "@electric-sql/pglite": "0.5.15",
+    "@playwright/test": "1.64.1",
     "@types/bun": "catalog:",
+    "drizzle-kit": "^0.31.10",
     "tsdown": "^0.16.5",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vite": "^6.2.2"
   }
 }

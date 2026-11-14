@@ -80,9 +80,13 @@
       },
       "devDependencies": {
         "@benstack-aws/config": "workspace:*",
+        "@electric-sql/pglite": "0.5.15",
+        "@playwright/test": "1.64.1",
         "@types/bun": "catalog:",
+        "drizzle-kit": "^0.31.10",
         "tsdown": "^0.16.5",
         "typescript": "^5",
+        "vite": "^6.2.2",
       },
     },
     "apps/sku-worker": {
