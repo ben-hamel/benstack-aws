@@ -4,8 +4,9 @@ import tailwindcss from "@tailwindcss/vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv } from "vite";
+import { developmentNetworking } from "@benstack-aws/config/dev-network";
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ mode, command }) => {
   const env = loadEnv(mode, process.cwd(), "");
 
   return {
@@ -15,12 +16,6 @@ export default defineConfig(({ mode }) => {
         "@": path.resolve(__dirname, "./src"),
       },
     },
-    server: {
-      host: env.DEV_SERVER_HOST || "127.0.0.1",
-      port: 3001,
-      allowedHosts: env.DEV_SERVER_ALLOWED_HOSTS
-        ? env.DEV_SERVER_ALLOWED_HOSTS.split(",").map((host) => host.trim())
-        : undefined,
-    },
+    ...(command === "serve" ? developmentNetworking(env) : {}),
   };
 });

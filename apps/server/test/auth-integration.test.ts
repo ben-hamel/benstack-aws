@@ -16,6 +16,8 @@ import { createServer, type ViteDevServer } from "vite";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { streamSSE } from "hono/streaming";
+import { developmentNetworking } from "@benstack-aws/config/dev-network";
 import { createAuth, type AuthDatabase } from "@benstack-aws/auth/factory";
 import * as schema from "@benstack-aws/db/schema/auth";
 import { createAuthMiddlewares } from "../src/middleware/auth-factory";
@@ -35,7 +37,7 @@ async function freePort() {
 // In-memory PostgreSQL only. Never imports the normal DB/env singleton, reads
 // app .env files, accepts DATABASE_URL, or runs a provider/worker. Schema comes
 // from today's Drizzle definitions, not the historical migration ledger.
-describe("real Better Auth integration (disposable PostgreSQL + Chromium)", () => {
+describe.each(["direct", "proxy"] as const)("real Better Auth integration: %s (disposable PostgreSQL + Chromium)", (topology) => {
   let client: PGlite;
   let database: ReturnType<typeof drizzle<typeof schema>>;
   let backend: Server;
@@ -45,6 +47,8 @@ describe("real Better Auth integration (disposable PostgreSQL + Chromium)", () =
   let page: Page;
   let frontendURL: string;
   let apiURL: string;
+  let browserAPIURL: string;
+  const browserApiOrigins = new Set<string>();
   let auth: ReturnType<typeof createAuth>;
   const password = "fixture-only-password-2026";
 
@@ -57,8 +61,9 @@ describe("real Better Auth integration (disposable PostgreSQL + Chromium)", () =
     const webPort = await freePort();
     apiURL = `http://127.0.0.1:${apiPort}`;
     frontendURL = `http://127.0.0.1:${webPort}`;
+    browserAPIURL = topology === "proxy" ? frontendURL : apiURL;
     auth = createAuth(database as unknown as AuthDatabase, {
-      BETTER_AUTH_URL: apiURL,
+      BETTER_AUTH_URL: browserAPIURL,
       BETTER_AUTH_SECRET: "fixture-only-secret-at-least-thirty-two-characters",
       CORS_ORIGIN: frontendURL,
       ALLOWED_EMAILS: "alice@example.test,bob@example.test",
@@ -68,15 +73,27 @@ describe("real Better Auth integration (disposable PostgreSQL + Chromium)", () =
     app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
     const { authMiddleware, orgMiddleware } = createAuthMiddlewares(auth, database as unknown as AuthDatabase);
     app.get("/api/test/protected", authMiddleware, orgMiddleware, (c) => c.json({ userId: c.get("user")!.id, orgId: c.get("orgId") }));
+    app.get("/api/test/stream", authMiddleware, orgMiddleware, (c) => streamSSE(c, async (stream) => {
+      await stream.writeSSE({ data: "first" });
+      await stream.sleep(150);
+      await stream.writeSSE({ data: "second" });
+    }));
+    app.post("/api/test/upload", authMiddleware, orgMiddleware, async (c) => {
+      const data = await c.req.formData();
+      const file = data.get("file");
+      if (!file || typeof file === "string") return c.json({ error: "Missing file" }, 400);
+      return c.json({ name: file.name, body: await file.text() });
+    });
     backend = serve({ fetch: app.fetch, hostname: "127.0.0.1", port: apiPort }) as Server;
 
+    const network = developmentNetworking({ DEV_API_PROXY: topology === "proxy" ? "1" : "0", DEV_API_PROXY_TARGET: apiURL });
     vite = await createServer({
       configFile: false, envFile: false,
       root: fileURLToPath(new URL("../../web", import.meta.url)),
       cacheDir: fileURLToPath(new URL("../dist/auth-test-vite-cache", import.meta.url)),
       optimizeDeps: { noDiscovery: true, include: ["better-auth/react", "zod"] },
-      define: { "import.meta.env.VITE_SERVER_URL": JSON.stringify(apiURL) },
-      server: { host: "127.0.0.1", port: webPort, strictPort: true, fs: { allow: [fileURLToPath(new URL("../../..", import.meta.url))] } },
+      define: topology === "proxy" ? network.define : { "import.meta.env.VITE_SERVER_URL": JSON.stringify(apiURL) },
+      server: { ...network.server, host: "127.0.0.1", port: webPort, strictPort: true, fs: { allow: [fileURLToPath(new URL("../../..", import.meta.url))] } },
       plugins: [{
         name: "disposable-auth-fixture",
         configureServer(server) {
@@ -101,6 +118,10 @@ describe("real Better Auth integration (disposable PostgreSQL + Chromium)", () =
       return url.hostname === "127.0.0.1" ? route.continue() : route.abort();
     });
     page = await context.newPage();
+    page.on("request", (request) => {
+      const url = new URL(request.url());
+      if (url.pathname.startsWith("/api/")) browserApiOrigins.add(url.origin);
+    });
     await page.goto(frontendURL + "/__auth_test");
     await page.waitForFunction(() => !!window.testAuth);
   }, 60_000);
@@ -117,7 +138,7 @@ describe("real Better Auth integration (disposable PostgreSQL + Chromium)", () =
     return page.evaluate(async (url) => {
       const response = await fetch(url + "/api/test/protected", { credentials: "include" });
       return { status: response.status, data: await response.json() as { userId?: string; orgId?: string } };
-    }, apiURL);
+    }, browserAPIURL);
   }
 
   test("configured auth models fit the current Drizzle schema without persistent DDL", () => {
@@ -166,9 +187,32 @@ describe("real Better Auth integration (disposable PostgreSQL + Chromium)", () =
     expect((await requestProtected()).status).toBe(200);
   });
 
+  test("multipart bodies and incremental SSE survive the transport without paid services", async () => {
+    const result = await page.evaluate(async (url) => {
+      const form = new FormData();
+      form.append("file", new File(["synthetic-upload"], "fixture.txt"));
+      const uploaded = await fetch(url + "/api/test/upload", { method: "POST", body: form, credentials: "include" });
+      const response = await fetch(url + "/api/test/stream", { credentials: "include" });
+      const reader = response.body!.getReader();
+      const first = new TextDecoder().decode((await reader.read()).value);
+      let rest = "";
+      while (true) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        rest += new TextDecoder().decode(chunk.value);
+      }
+      return { status: uploaded.status, upload: await uploaded.json(), first, rest };
+    }, browserAPIURL);
+    expect(result.status).toBe(200);
+    expect(result.upload).toEqual({ name: "fixture.txt", body: "synthetic-upload" });
+    expect(result.first).toContain("data: first");
+    expect(result.first).not.toContain("data: second");
+    expect(result.rest).toContain("data: second");
+  });
+
   test("untrusted mutation origins and redirect targets are rejected", async () => {
     const cookie = (await context.cookies()).filter((value) => value.name.includes("session_token")).map((value) => `${value.name}=${value.value}`).join("; ");
-    const response = await fetch(apiURL + "/api/auth/sign-in/email", {
+    const response = await fetch(browserAPIURL + "/api/auth/sign-in/email", {
       method: "POST", headers: { "Content-Type": "application/json", Origin: "https://untrusted.example", Cookie: cookie },
       body: JSON.stringify({ email: "alice@example.test", password }),
     });
@@ -183,7 +227,7 @@ describe("real Better Auth integration (disposable PostgreSQL + Chromium)", () =
     const otherOrgId = crypto.randomUUID();
     await database.insert(schema.organization).values({ id: otherOrgId, name: "Other tenant", slug: "other-tenant", createdAt: new Date() });
     const cookie = (await context.cookies()).filter((value) => value.name.includes("session_token")).map((value) => `${value.name}=${value.value}`).join("; ");
-    const switched = await fetch(apiURL + "/api/auth/organization/set-active", {
+    const switched = await fetch(browserAPIURL + "/api/auth/organization/set-active", {
       method: "POST", headers: { "Content-Type": "application/json", Origin: frontendURL, Cookie: cookie },
       body: JSON.stringify({ organizationId: otherOrgId }),
     });
@@ -203,7 +247,7 @@ describe("real Better Auth integration (disposable PostgreSQL + Chromium)", () =
     expect(result.error).toBeNull();
     expect((await requestProtected()).status).toBe(401);
     expect((await page.evaluate(() => window.testAuth.getSession())).data).toBeNull();
-    const replay = await fetch(apiURL + "/api/test/protected", { headers: { Cookie: oldCookie } });
+    const replay = await fetch(browserAPIURL + "/api/test/protected", { headers: { Cookie: oldCookie } });
     expect(replay.status).toBe(401);
   });
 
@@ -218,6 +262,10 @@ describe("real Better Auth integration (disposable PostgreSQL + Chromium)", () =
     expect(result.error).toBeNull();
     expect((await page.evaluate(() => window.testAuth.getSession())).data?.user.id).toBe(id);
     await page.evaluate(() => window.testAuth.signOut());
+  });
+
+  test("browser API calls use the configured public origin, including in proxy mode", () => {
+    expect([...browserApiOrigins]).toEqual([browserAPIURL]);
   });
 
   test("invalid credentials and non-allowlisted registration fail", async () => {

@@ -8,7 +8,7 @@
     "build:web-function": "bun --no-env-file scripts/build-web-function.ts",
     "dev:web-function": "bun --no-env-file scripts/build-web-function.ts && bun --no-env-file scripts/dev-web-function.ts",
     "test:web-function": "bun --no-env-file scripts/build-web-function.ts && bun --no-env-file test test/web-function.test.ts",
-    "test:auth": "bun --no-env-file test --timeout 60000 test/auth-integration.test.ts",
+    "test:auth": "bun --no-env-file test --timeout 60000 test/auth-integration.test.ts test/dev-network.test.ts",
     "check-types": "tsc -b",
     "compile": "bun build --compile --minify --sourcemap --bytecode ./src/index.ts --outfile server",
     "dev": "bun run --hot src/index.ts",
