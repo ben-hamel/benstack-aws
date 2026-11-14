@@ -5,7 +5,10 @@ The app composes today's shadcn primitives directly. There is no legacy
 
 ## Current sources
 
-- shadcn CLI 4.23.0, with the existing `base-lyra` configuration/theme.
+- Source generated with shadcn CLI 4.23.0 and the existing `base-lyra` theme.
+  Its official `eject` command inlined `shadcn/tailwind.css` into `globals.css`,
+  retaining upstream styling and its MIT license without installing the CLI's
+  generator dependencies in the application.
 - Base UI 1.9.0.
 - `@shadcn/react` 0.3.1 for Message Scroller.
 - Primitive source fetched with the official CLI, including workspace import
@@ -50,8 +53,15 @@ blanket AI Elements exclusion remains. Deleted source is recoverable from Git.
 From `packages/ui`:
 
 ```bash
-bun --no-env-file x --no-install shadcn add COMPONENT_NAME
+bun --no-env-file x shadcn@4.23.0 add COMPONENT_NAME
 ```
+
+Run the generator on demand rather than keeping `shadcn` installed. The generator
+still has upstream advisories in its own tooling dependencies; use trusted registry
+input, review updates before running it, and review every generated diff. Ejected
+styles do not receive CLI CSS updates automatically: explicitly review and refresh
+the upstream CSS snapshot when upgrading component source. Keep the ejected marker
+and MIT notice. `@shadcn/react` remains installed for runtime components.
 
 Install only what the feature needs, review its diff, and use the Base UI variant.
 For AI patterns, compose the primitives from https://ui.shadcn.com/docs/ai-elements.
