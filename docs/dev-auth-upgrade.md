@@ -4,8 +4,11 @@
 
 Work is local on `feat/better-auth-upgrade-proxy`. No main merge, Git push,
 deployment, persistent database/schema push, provider request or worker start
-is authorized by this work. Existing main deployment workflows remain active;
-do not merge/push main until deployment controls and the rollout are reviewed.
+is authorized by this work. As a separate final safety change, all four deployment
+workflows are made manual-only (workflow_dispatch); main pushes no longer trigger
+deployment when these workflow changes reach main. Until then, main's existing
+workflows remain automatic. No workflow has been dispatched. Manual deployment
+still needs target/backup/schema/rollout review; its db:push behavior is unchanged.
 
 Before changes, a private local backup was created at:
 `/home/ben/.local/state/benstack-checkpoints/20261114T005335Z-auth-upgrade/`.
@@ -103,3 +106,34 @@ Baseline 1.5.5: seven browser integration tests passed before the dependency
 change. Upgraded 1.7.20: nine passed, including added schema and legacy-hash
 checks. OAuth, email delivery and browser HTTPS/secure-cookie behavior are not
 covered by these HTTP fixtures.
+
+## Proxy and manual development
+
+Use `bun run dev:local` or `bun run dev:network` from the repository root.
+The network command discovers Tailscale IPv4 and prints the browser URL on port
+3001; the API stays on 127.0.0.1:3000. The launcher aligns auth/CORS URLs with
+the frontend, and Vite forwards `/api/*` while preserving cookies, paths,
+multipart bodies and streaming. It does not edit saved env files. Credentials
+continue coming from the API's existing env files. Starting the full app uses
+those configured dev services and runs the app's normal DB/checkpointer setup.
+No persistent database was accessed during this upgrade task.
+
+Proxying is dev-only and opt-in outside those launchers. Production builds keep
+the existing VITE_SERVER_URL and separate-origin deployment; no CloudFront or
+other production routing was changed. No proxy header trust, cookie rewriting,
+security bypass or persistent auth schema change was required.
+
+Validation completed before the user requested stopping further test work:
+27 auth/network tests (direct and proxied), nine runtime tests, workspace types,
+production frontend build, Lambda bundle, frozen install, and the existing
+receipt/product-research/worker/evidence suites passed. The isolated demo API's
+second PostgreSQL/WASM initialization exceeded its old five-second test limit;
+that one fixture test now has the same 30-second initialization budget as its
+suite setup, and all seven demo API tests passed. Assertions are unchanged.
+The separate demo browser run was interrupted at user request, so its result
+is NOT claimed. Its leftover disposable server was stopped.
+
+The real dev servers remain stopped after the dependency update. Manual testing
+can resume with `bun run dev:network`; no automated or manual login on the real
+development DB was performed as part of the upgrade. Further test expansion is
+deferred at the user's request. Nothing has been pushed or deployed.

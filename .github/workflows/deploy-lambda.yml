@@ -1,15 +1,9 @@
 name: Deploy Lambda
 
+# Manual-only: merging main must not deploy code or push a database schema.
+# Review target, backups and rollout before explicitly running this workflow.
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - "apps/receipt-processor/**"
-      - "packages/db/**"
-      - "packages/receipt-import/**"
-      - "bun.lock"
-      - ".github/workflows/deploy-lambda.yml"
 
 permissions:
   id-token: write

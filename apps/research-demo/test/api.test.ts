@@ -35,7 +35,8 @@ test("Tailscale demo uses its exact origin for mutations", async () => {
     expect((await remote.app.request("/api/demo/reset", { method: "POST", headers: { origin: remoteOrigin } })).status).toBe(200);
     expect((await remote.app.request("/api/demo/reset", { method: "POST", headers: { origin } })).status).toBe(403);
   } finally { await remote.close(); }
-});
+  // This test initializes a second PostgreSQL/WASM instance, like beforeAll.
+}, 30_000);
 
 test("only the exact bundled fictional receipt is accepted", async () => {
   const bad = structuredClone(sampleReceipts); bad[0]!.membershipNumber = "real-looking-data-must-be-refused";

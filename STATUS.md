@@ -1,8 +1,53 @@
-# Where I left off: shared SKU catalog refactor
+# Where I left off: auth upgrade and remote development
 
-Updated: 2026-11-08
+Updated: 2026-11-14
 
-## Latest checkpoint: shared-catalog specification written, implementation not started
+## Latest checkpoint: Better Auth upgraded; manual testing next
+
+Local branch `feat/better-auth-upgrade-proxy`. User approved backup/checkpoint,
+auth upgrade, then Vite proxy; no main push/merge, production deployment or
+persistent DB/schema changes. User subsequently requested stopping further
+automated test work and proceeding with manual testing. Do not expand/run more
+tests without a new request.
+
+Private local backup (source, ignored env, Git bundle and worker state with SQLite
+backup API) is `/home/ben/.local/state/benstack-checkpoints/20261114T005335Z-auth-upgrade/`.
+This is NOT a Neon backup or off-machine backup. Existing work was checkpointed
+at `4fba981`; auth baseline is `fb853c5`; upgrade is `417ed55`. All remain local.
+
+Better Auth client/server catalog pin is 1.7.20, up from 1.5.5. Latest 1.7.23 was
+blocked by the existing three-day package-age guard; that guard was preserved.
+Auth/org hooks and middleware were extracted into injectable factories, with
+real origin/CSRF checks explicitly enabled even under test runners. No auth
+schema file, migration ledger, db:push or persistent DB was changed. Production
+rollout still needs fresh verified DB backup, actual schema/account-duplicate
+inspection and approval. See `docs/dev-auth-upgrade.md` for version/rollback notes.
+
+`bun run dev:network` starts the full app with a Tailscale-only frontend on 3001
+and loopback-only API on 3000 through Vite's `/api/*` proxy. `dev:local` uses
+loopback for both. Auth/CORS/public API URLs are aligned automatically without
+editing .env files. Existing ordinary `dev` and production VITE_SERVER_URL
+behavior remain unchanged. Starting the real app still runs its normal DB setup
+and real provider actions may incur usage charges. No research worker starts.
+
+Completed: 27 auth/network tests (actual Chromium, PGlite and real auth/client,
+direct plus proxy), nine runtime tests, workspace types/production frontend
+build, Lambda bundle and frozen install. Existing receipt/research/65 worker/
+evidence tests and seven isolated demo API tests passed. One existing WASM
+fixture initialization test needed a 30-second timeout instead of five seconds;
+assertions unchanged. Separate demo browser run was interrupted by the user;
+no passing result claimed and leftover disposable server stopped.
+
+Real dev API/frontend were stopped before the dependency change and have NOT
+been restarted against ben-local. Next is user-driven manual testing with
+`bun run dev:network`. The four deployment workflows are being checkpointed as
+manual-only; until these changes reach main, GitHub main's old automatic
+workflows remain in effect. No workflow dispatched, no infrastructure deployed.
+
+The shared catalog specification below remains the product-research source of
+truth, with implementation NOT STARTED; this task did not change that behavior.
+
+## Previous checkpoint: shared-catalog specification written, implementation not started
 
 Source of truth for the next work:
 [docs/specs/shared-sku-catalog.md](docs/specs/shared-sku-catalog.md).

@@ -1,14 +1,9 @@
 name: Deploy Web
 
+# Manual-only: merging main must not deploy code or push a database schema.
+# Review target, backups and rollout before explicitly running this workflow.
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - "apps/web/**"
-      - "packages/**"
-      - "bun.lock"
-      - ".github/workflows/deploy-web.yml"
 
 permissions:
   id-token: write
