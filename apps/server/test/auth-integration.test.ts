@@ -8,7 +8,8 @@ import type { Server } from "node:http";
 import type { createAuthClient } from "better-auth/react";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
-import { and, eq } from "drizzle-orm";
+import { and, eq, getTableColumns, is, Table } from "drizzle-orm";
+import { getSchema } from "better-auth/db";
 import { generateDrizzleJson, generateMigration } from "drizzle-kit/api";
 import { chromium, type Browser, type BrowserContext, type Page } from "@playwright/test";
 import { createServer, type ViteDevServer } from "vite";
@@ -44,6 +45,7 @@ describe("real Better Auth integration (disposable PostgreSQL + Chromium)", () =
   let page: Page;
   let frontendURL: string;
   let apiURL: string;
+  let auth: ReturnType<typeof createAuth>;
   const password = "fixture-only-password-2026";
 
   beforeAll(async () => {
@@ -55,7 +57,7 @@ describe("real Better Auth integration (disposable PostgreSQL + Chromium)", () =
     const webPort = await freePort();
     apiURL = `http://127.0.0.1:${apiPort}`;
     frontendURL = `http://127.0.0.1:${webPort}`;
-    const auth = createAuth(database as unknown as AuthDatabase, {
+    auth = createAuth(database as unknown as AuthDatabase, {
       BETTER_AUTH_URL: apiURL,
       BETTER_AUTH_SECRET: "fixture-only-secret-at-least-thirty-two-characters",
       CORS_ORIGIN: frontendURL,
@@ -117,6 +119,19 @@ describe("real Better Auth integration (disposable PostgreSQL + Chromium)", () =
       return { status: response.status, data: await response.json() as { userId?: string; orgId?: string } };
     }, apiURL);
   }
+
+  test("configured auth models fit the current Drizzle schema without persistent DDL", () => {
+    const tables = Object.fromEntries(Object.entries(schema).filter(([, value]) => is(value, Table)));
+    for (const [name, definition] of Object.entries(getSchema(auth.options))) {
+      const table = tables[name];
+      expect(table, `Missing auth table: ${name}`).toBeDefined();
+      if (!table) continue;
+      const columns = getTableColumns(table as Table);
+      for (const field of Object.keys(definition.fields)) {
+        expect(columns[field], `Missing auth field: ${name}.${field}`).toBeDefined();
+      }
+    }
+  });
 
   test("unauthenticated protected requests are rejected", async () => {
     expect((await requestProtected()).status).toBe(401);
@@ -190,6 +205,19 @@ describe("real Better Auth integration (disposable PostgreSQL + Chromium)", () =
     expect((await page.evaluate(() => window.testAuth.getSession())).data).toBeNull();
     const replay = await fetch(apiURL + "/api/test/protected", { headers: { Cookie: oldCookie } });
     expect(replay.status).toBe(401);
+  });
+
+  test("an existing 1.5.5 password hash still signs in after the upgrade", async () => {
+    // Generated and verified with better-auth@1.5.5 for this synthetic password.
+    // This is fixture data, never copied from a real account.
+    const hash = "8b87446bb465cc86108fab168180055a:69ffeb7c16d0cc1efd8f9f8eb288af0bc4f8fab49fe5088307329a83385c2dc5a857e9d53386a6a9e85836ca36d40ae98e024ef13a66f4dbe7aee36edd06aac2";
+    const id = crypto.randomUUID();
+    await database.insert(schema.user).values({ id, name: "Legacy Fixture", email: "bob@example.test" });
+    await database.insert(schema.account).values({ id: crypto.randomUUID(), accountId: id, providerId: "credential", userId: id, password: hash, createdAt: new Date(), updatedAt: new Date() });
+    const result = await page.evaluate(async ({ password }) => window.testAuth.signIn.email({ email: "bob@example.test", password }), { password });
+    expect(result.error).toBeNull();
+    expect((await page.evaluate(() => window.testAuth.getSession())).data?.user.id).toBe(id);
+    await page.evaluate(() => window.testAuth.signOut());
   });
 
   test("invalid credentials and non-allowlisted registration fail", async () => {
