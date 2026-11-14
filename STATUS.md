@@ -1,8 +1,8 @@
 # Where I left off: shared SKU catalog refactor
 
-Updated: 2026-11-08
+Updated: 2026-11-14
 
-## Latest checkpoint: shared-catalog specification written, implementation not started
+## Latest checkpoint: main integrated into SKU branch; catalog implementation not started
 
 Source of truth for the next work:
 [docs/specs/shared-sku-catalog.md](docs/specs/shared-sku-catalog.md).
@@ -12,18 +12,25 @@ ordinary user or organization-owner feature. Initial global identifications need
 human system-admin approval; eligible historical/new receipts read approved shared
 metadata without financial rewrites. Catalog knowledge survives tenant deletion.
 
-Wrote the durable spec with named ASCII diagrams, agreed decisions, data/privacy
-boundaries, global deduplication, system authorization, worker/deletion semantics,
-legacy evidence/conflict mapping, safe historical backfill, db:push-based
-expand-and-contract, bounded work packages, acceptance checks and cross-agent
-handoff rules. Added a supersession notice to the old org-scoped spec and an
-AGENTS.md pointer. All shared-catalog phases are NOT STARTED. This run changes
-DOCUMENTATION ONLY: no application/schema change, DB push, role grant, backfill,
-provider request, worker restart, production operation or deployment.
+User requested only bringing main into `feat/sku-extraction-coverage` for now.
+Integrated `origin/main` at `7bb6f19` (merged auth/UI and security PRs #13/#14),
+preserving the SKU/receipt/research foundations checkpointed in `4fba981`.
+Resolved server dependencies by keeping main's patched versions plus the SKU
+workspace/SSM/Node-server dependencies. Regenerated the lockfile from main's
+baseline with the three-day release-age rule intact. Removed the unused legacy
+inline-citation file rather than restoring the retired AI Elements directory.
+The UI package and chat implementation match main; Pi packages remain at 1.5.0.
 
-Documentation validation: git diff --check passed; relative Markdown links, code
-fences and control-character checks passed for both specs, STATUS.md and AGENTS.md.
-No runtime test suite was rerun for this documentation-only change.
+Validation: all seven workspace type-check tasks passed (including the web
+production build), all three research-evidence rendering tests passed, both API
+and receipt-processor Lambda bundles built, frozen install and diff checks passed.
+Forced dependency relinking before checks to avoid stale cached module links.
+Audit retains only the known moderate Drizzle Kit/esbuild loader advisory from
+main; no critical/high findings. Existing large frontend chunk warning remains.
+No full worker/database/browser suite or live auth/chat check was run for this
+integration. No database read/write/push, role grant, backfill, provider request,
+worker restart, environment-file change, production operation or deployment ran.
+All shared-catalog phases remain NOT STARTED.
 
 Next bounded action, when implementation is requested: Phase 0 inventory/freeze.
 Read AGENTS.md + the new spec, inspect current worktree, verify target/worker
@@ -35,7 +42,7 @@ queues for one SKU. Spec approval is not authorization for persistent schema
 pushes, destructive conversion, role grants or more live calls. Do not switch
 from db:push to a migration-based workflow.
 
-Updated observed runtime history: the automatic dev test DID complete after the
+Earlier runtime evidence (not rechecked this session): the automatic dev test DID complete after the
 previous checkpoint. Request `f32892bf-70fd-4a67-822e-426a5d4cc865`, SKU 1218213,
 was queued through the UI, researched using the ChatGPT plan and published
 awaiting_review as Dempster's 10-in White Tortillas, pack of 18. User screenshots
@@ -48,16 +55,18 @@ tool error and 72.21 seconds. Hosted-search model tokens were NOT captured; libr
 API-price estimates are not actual ChatGPT charges. No research was rerun to obtain
 these numbers. No automatic usage-report feature has been implemented yet.
 
-The normal dev app's ignored environment still has org-scoped admission enabled
-for ben-local from prior work. This spec did not change that setting or the old
-research UI/permissions. Verify running services, pending work and target before
-starting the refactor. Existing code/DB still implement the legacy org-scoped model.
+Earlier checkpoints reported org-scoped admission enabled for ben-local in the
+ignored development environment. This integration did not inspect or change that
+setting or switch research ownership/permissions. Verify running services, pending
+work, actual schema and target before starting the refactor; do not treat historic
+process IDs or database observations as current. The SKU code retains the legacy
+organization-scoped model.
 Earlier approved butter evidence and pending tortilla evidence must be preserved;
 size/brand/pack extraction remains a separate improvement. Detailed API-key usage
 accounting remains deferred by user choice, with basic execution safeguards kept.
-All feature and documentation changes remain uncommitted. See older checkpoints
-below for test suites, dev URLs, backup locations and process IDs; those are
-historical observations, not current guarantees.
+The feature/spec work is preserved in the SKU branch's committed history. See
+older checkpoints below for prior test suites, dev URLs, backup locations and
+process IDs; those are historical observations, not current guarantees.
 
 ## Previous checkpoint: ChatGPT automatic dev Research Worker connected and waiting
 

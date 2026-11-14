@@ -5,7 +5,7 @@
     "build": "bun build src/index.ts --outfile dist/index.js --target node --bundle --format cjs"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.821.0",
+    "@aws-sdk/client-s3": "^3.1164.0",
     "@benstack-aws/db": "workspace:*",
     "@benstack-aws/receipt-import": "workspace:*",
     "@neondatabase/serverless": "^1.1.0",
