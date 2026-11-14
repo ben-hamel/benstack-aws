@@ -23,8 +23,6 @@
   "type": "module",
   "scripts": {
     "dev": "turbo dev",
-    "dev:local": "bun --no-env-file scripts/dev-app.ts --local",
-    "dev:network": "bun --no-env-file scripts/dev-app.ts --network",
     "build": "turbo build",
     "check-types": "turbo check-types",
     "dev:web": "turbo -F web dev",

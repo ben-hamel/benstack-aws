@@ -8,40 +8,33 @@ Pick whichever works best for you:
 - [Lima VM](docs/lima.md) — lightweight VM via Lima (macOS only)
 - [Dev Container](docs/dev-container.md) — Docker-based container with VS Code Dev Containers
 
-## Local or remote development with Vite proxying
+## Remote development with Vite proxying
 
-From the repository root:
+Start each server in a separate Rex pane using explicit settings. No network
+launcher scripts or saved env overrides are required. Example for this dev VM:
 
 ```bash
-bun run dev:local    # http://127.0.0.1:3001, this machine only
-bun run dev:network  # detects Tailscale IPv4 and prints your remote browser link
+env WEB_FUNCTION_LOCAL_ENDPOINT=127.0.0.1:3000 \
+  BETTER_AUTH_URL=http://100.67.130.3:3001 \
+  CORS_ORIGIN=http://100.67.130.3:3001 \
+  bun run --cwd apps/server dev:web-function
+
+env DEV_SERVER_HOST=100.67.130.3 DEV_API_PROXY=1 \
+  DEV_API_PROXY_TARGET=http://127.0.0.1:3000 \
+  VITE_SERVER_URL=http://100.67.130.3:3001 \
+  bun run --cwd apps/web dev --strictPort
 ```
 
-Both start the full Node/Hono API and Vite frontend. Stop existing servers on
-ports 3000/3001 first. In network mode your browser needs Tailscale connected;
-only the frontend binds to the Tailscale interface. The API remains on loopback
-and Vite forwards `/api/*`, including Better Auth, without changing paths or
-cookies. Auth base URL, trusted origin and browser API URL are aligned by the
-launcher. Settings are passed to child processes; your env files are unchanged.
-Ctrl+C stops both servers. Vite hot reload works as usual; restart for API edits.
-Run either command inside Rex if you want it to remain running after disconnect.
+Open http://100.67.130.3:3001 with Tailscale connected. The API stays on loopback
+and Vite proxies /api, including auth. These process settings do not edit .env
+files. Existing API env files still supply credentials and the database URL.
+The real app performs its usual database setup; AI/upload actions can incur
+their normal usage costs. Nothing is deployed by these commands.
 
-The API still uses `apps/server/.env` / `.env.development` / `.env.local` for
-credentials and database settings. Starting the real app performs its normal
-DB/checkpointer initialization, and real AI/upload actions can incur their usual
-provider/storage costs. These commands never deploy or provision anything.
-The original `bun run dev` and `dev:server` commands retain their prior behavior.
-
-Proxying is opt-in for manual Vite launches with `DEV_API_PROXY=1`; the backend
-must use the browser-facing frontend URL for `BETTER_AUTH_URL` and `CORS_ORIGIN`.
-The new launchers handle this automatically. **Vite's proxy is dev-only:** built
-production assets still use `VITE_SERVER_URL` and the existing separate-origin
-architecture. Production proxy adoption is a separate infrastructure decision.
-Do not change production auth URLs to the frontend domain until routing exists.
-
-Run `bun run --cwd apps/server test:auth` for isolated browser/auth regression
-tests (requires Playwright Chromium), without a real DB or personal accounts.
-See [auth upgrade notes](docs/dev-auth-upgrade.md) for validation and rollback.
+For local-only access, replace 100.67.130.3 with 127.0.0.1 in both commands.
+Vite proxying is opt-in and dev-only; production builds still use the configured
+VITE_SERVER_URL and existing separate-origin infrastructure. The original
+ordinary dev commands remain unchanged. See [auth upgrade notes](docs/dev-auth-upgrade.md).
 
 ## Database Setup
 

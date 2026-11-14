@@ -109,14 +109,15 @@ covered by these HTTP fixtures.
 
 ## Proxy and manual development
 
-Use `bun run dev:local` or `bun run dev:network` from the repository root.
-The network command discovers Tailscale IPv4 and prints the browser URL on port
-3001; the API stays on 127.0.0.1:3000. The launcher aligns auth/CORS URLs with
-the frontend, and Vite forwards `/api/*` while preserving cookies, paths,
-multipart bodies and streaming. It does not edit saved env files. Credentials
-continue coming from the API's existing env files. Starting the full app uses
-those configured dev services and runs the app's normal DB/checkpointer setup.
-No persistent database was accessed during this upgrade task.
+At the user's request, the added dev:local/dev:network scripts and automatic
+network launcher were removed. Use explicit per-process env commands in
+DEVELOPMENT.md instead; nothing is saved to the real env files. The API stays
+on 127.0.0.1:3000; Vite binds to the chosen Tailscale address on 3001 and proxies
+/api while preserving cookies, paths, multipart bodies and streaming.
+Credentials continue coming from the API's existing env files. The isolated
+upgrade tests did not access a persistent DB. A later user-authorized manual
+startup uses the existing ben-local configuration and normal DB/checkpointer
+setup; the proxied unauthenticated session endpoint and readiness return 200.
 
 Proxying is dev-only and opt-in outside those launchers. Production builds keep
 the existing VITE_SERVER_URL and separate-origin deployment; no CloudFront or
@@ -133,7 +134,7 @@ suite setup, and all seven demo API tests passed. Assertions are unchanged.
 The separate demo browser run was interrupted at user request, so its result
 is NOT claimed. Its leftover disposable server was stopped.
 
-The real dev servers remain stopped after the dependency update. Manual testing
-can resume with `bun run dev:network`; no automated or manual login on the real
-development DB was performed as part of the upgrade. Further test expansion is
-deferred at the user's request. Nothing has been pushed or deployed.
+Following the user's request, the real dev servers were started in Rex using
+explicit commands at http://100.67.130.3:3001. No login was performed on the
+user's behalf. Further automated test work remains deferred at the user's
+request. Nothing has been pushed or deployed.

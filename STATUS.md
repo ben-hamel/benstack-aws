@@ -23,12 +23,13 @@ schema file, migration ledger, db:push or persistent DB was changed. Production
 rollout still needs fresh verified DB backup, actual schema/account-duplicate
 inspection and approval. See `docs/dev-auth-upgrade.md` for version/rollback notes.
 
-`bun run dev:network` starts the full app with a Tailscale-only frontend on 3001
-and loopback-only API on 3000 through Vite's `/api/*` proxy. `dev:local` uses
-loopback for both. Auth/CORS/public API URLs are aligned automatically without
-editing .env files. Existing ordinary `dev` and production VITE_SERVER_URL
-behavior remain unchanged. Starting the real app still runs its normal DB setup
-and real provider actions may incur usage charges. No research worker starts.
+Followup: user asked to REMOVE the new network launcher scripts and use explicit
+commands for now. Removed dev:local/dev:network, scripts/dev-app.ts and the shared
+launcher plan; kept the auth upgrade and opt-in Vite proxy. Real .env files remain
+unchanged. See DEVELOPMENT.md for the exact per-process commands. Existing
+ordinary dev and production VITE_SERVER_URL behavior remain unchanged. Real app
+startup uses its existing dev DB and normal setup; AI/upload usage can incur
+normal costs. No research worker starts.
 
 Completed: 27 auth/network tests (actual Chromium, PGlite and real auth/client,
 direct plus proxy), nine runtime tests, workspace types/production frontend
@@ -38,11 +39,14 @@ fixture initialization test needed a 30-second timeout instead of five seconds;
 assertions unchanged. Separate demo browser run was interrupted by the user;
 no passing result claimed and leftover disposable server stopped.
 
-Real dev API/frontend were stopped before the dependency change and have NOT
-been restarted against ben-local. Next is user-driven manual testing with
-`bun run dev:network`. The four deployment workflows are being checkpointed as
-manual-only; until these changes reach main, GitHub main's old automatic
-workflows remain in effect. No workflow dispatched, no infrastructure deployed.
+User then asked to run the app: started explicit commands in Rex tab
+Dev - manual commands, API block block:01a1d7a8-84ca-7ad1-9c4b-5f4841bde9a5,
+frontend block block:01a1d7a8-9d0b-7f3b-bb15-225c21c66e51. Browser link is
+http://100.67.130.3:3001 over Tailscale; backend listens on 127.0.0.1:3000.
+Verified frontend, proxied auth/get-session and API readiness return 200; no
+login performed for the user. No more automated tests were run. Deployments
+are manual-only in this branch; main's old triggers remain until merged.
+No workflow dispatched, no infrastructure deployed.
 
 The shared catalog specification below remains the product-research source of
 truth, with implementation NOT STARTED; this task did not change that behavior.
