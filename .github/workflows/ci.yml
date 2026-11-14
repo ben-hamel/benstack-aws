@@ -20,3 +20,64 @@ jobs:
 
       - name: Type check
         run: bunx turbo check-types
+
+      - name: Offline receipt import and review tests (PostgreSQL/WASM)
+        run: |
+          bun run --cwd packages/receipt-import test
+          bun run --cwd packages/product-research test
+          bun run --cwd apps/web test:research
+
+  receipt-import-postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: receipt_import
+          POSTGRES_PASSWORD: fixture-only
+          POSTGRES_DB: receipt_import_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U receipt_import -d receipt_import_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.9
+      - run: bun install --frozen-lockfile
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Receipt import and review integration tests (node-postgres, multiple connections)
+        run: |
+          bun run --cwd packages/receipt-import test
+          bun run --cwd packages/product-research test
+        env:
+          RECEIPT_IMPORT_TEST_DATABASE_URL: postgresql://receipt_import:fixture-only@localhost:5432/receipt_import_test
+      - name: Offline durable bridge and evidence rendering tests
+        run: |
+          bun run --cwd apps/sku-worker test
+          bun run --cwd apps/web test:research
+
+  research-browser-demo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: bun install --frozen-lockfile
+      - name: Install disposable test browser
+        run: bun x --no-install playwright install --with-deps chromium
+        working-directory: apps/research-demo
+      - name: Verify isolated demo and browser workflow
+        run: |
+          bun run --cwd apps/research-demo test
+          bun run test:research-browser

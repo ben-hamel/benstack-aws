@@ -6,6 +6,153 @@ uses `pi-web-access`'s standalone MCP server; new research no longer calls Exa.
 It does not import Benstack's environment, connect to Postgres, change the existing
 chat, update product records, or deploy infrastructure.
 
+An explicit **offline** queue bridge is now available in `src/queue-executor.ts`
+for fixture/faux-provider integration with the app's review workflow. It does not
+start automatically, load personal credentials, or enable service billing. Structured
+proposals come from committed direct-page evidence via `openJob().result()`, not
+answer prose; conflicts and missing variant/pack evidence remain unresolved.
+See [worker/review integration](../../packages/product-research/README.md) for
+claim fencing, saved-result publication, approval boundaries, and launch gates.
+
+## Automatic Research Worker - ChatGPT development
+
+The separate `sku:auto` command now connects the automatic queue loop to the
+existing ChatGPT-plan Node worker, **only on the pinned Neon ben-local endpoint**.
+It is not started by the API or deployed to production.
+
+```bash
+bun run sku:auto -- --help
+bun run sku:auto -- --allow-live --max-jobs 1
+```
+
+Both explicit `--allow-live` consent and enabled org-scoped admission are required.
+It resolves one owner/admin from ALLOWED_EMAILS (use `--organization` if ambiguous),
+reauthorizes membership on each claim, and processes only that organization's
+QUEUED requests. Existing PAUSED requests stay paused. Newly imported eligible
+products queue when the dev API has `PRODUCT_RESEARCH_ADMISSION_ENABLED=true` and
+its org allowlist configured. To start one old paused request from the app, choose
+it in Product research, acknowledge allowance use and click **Queue research**.
+Use direct **Upload (dev)** until the AWS upload path has an isolated dev pipeline.
+
+Default maxJobs is **one attempt per process start**; the command waits for work,
+then exits after one job. It does not restart itself. Larger finite batches require
+an explicit `--max-jobs` value (maximum 100), still sequential and subject to
+admission quotas. Add `--drain` to exit instead of waiting when no claim is available.
+A failed execution stops the worker; terminal/running/expired requests are never
+silently restarted. Completed evidence is saved under the existing
+`<worker-state>/pilot-jobs/<request-id>/` path before publication. Transient DB
+publication retries reuse that result, not inference. Failures requiring recovery
+remain an explicit operator task; there is no automatic recovery loop.
+
+The coordinator uses a separate local state lock in
+`<worker-state>/auto-coordinator/`. Create `PAUSED` there to stop new claims; the
+current job may finish. Ctrl+C cancels active work with graceful child shutdown,
+then a bounded hard-stop fallback. Remove PAUSED and explicitly restart to resume.
+The Node worker receives no database/AWS/API-key settings, uses only the separate
+worker ChatGPT grant, and never falls back to API billing or personal Pi/Codex auth.
+Approval remains in the regular app; no product fields are auto-approved.
+
+The operator chose to defer detailed token/cost accounting until an API-key
+version. ChatGPT plan windows are NOT hard per-job token caps. Existing five-minute,
+eight-turn and 12-tool-call limits remain, but are not precise monetary limits.
+Persistent usage reservations, automated recovery, service credentials and hosting
+are still production/API-key rollout considerations, not features of this dev run.
+
+## Automatic Research Worker - offline only
+
+The automatic loop is implemented in
+`packages/product-research/src/automatic.ts`. It watches queued requests without a
+per-request terminal command, processes one at a time, and publishes proposals for
+human review. **The offline entrypoint still rejects live executors and its
+standalone command cannot target ben-local or production.** The separate explicitly
+consented ChatGPT dev entrypoint is described above. Neither promotes paused work.
+
+Safety behavior:
+- Disabled unless supplied an explicit enabled organization allowlist; rechecks
+  policy between jobs/polls. A runtime pause stops new claims; Ctrl+C cancels work.
+- Default **one attempted job per process**, configurable only to a finite 1-100
+  offline jobs. Stops on execution failure instead of consuming the remaining queue.
+- Existing DB locks/fenced leases permit only one active request globally, even
+  with two worker processes. Expired running jobs are NOT automatically reclaimed.
+- Duplicate uploads reuse DB requests. Finished/failed/running jobs are not
+  automatically reexecuted when the worker process restarts.
+- Transient DB publication errors get at most three attempts using the SAME result;
+  execution is never repeated. Permanent errors stop immediately. Exhausted or
+  uncertain publication leaves the running claim for operator inspection.
+- Paused admission, tenant scope, human approval and original receipt facts remain
+  unchanged. This per-process count is NOT a persistent monetary/token allowance.
+
+The browser demo now exercises this same loop with its isolated fictional data.
+A standalone smoke-test command is also available:
+
+```bash
+bun run sku:auto:offline -- --help
+RECEIPT_IMPORT_TEST_DATABASE_URL=postgresql://test:test@127.0.0.1:55432/receipt_import_test \
+  bun run sku:auto:offline -- --enabled --organization fixture-org --max-jobs 1
+```
+
+The standalone command requires an **already initialized disposable local** test
+DB. It does not create/drop schemas, seed users, or enable receipt admission. It
+never reads app `.env` files or `DATABASE_URL`; Neon and normal app databases are
+rejected. It imports no model/search/page provider and never accesses worker auth.
+It publishes clearly labeled synthetic **unresolved** results only, saving JSON
+first in `~/.local/state/benstack-sku-auto-offline/exports/`. Add `--drain` to stop
+when no claim is available, otherwise it waits for later uploads. Create
+`~/.local/state/benstack-sku-auto-offline/PAUSED` to stop new claims, or Ctrl+C to
+cancel. Removing the file does not restart an exited worker automatically.
+
+The automated native-PG tests start the actual command against fixture data and
+verify its export/publication. They also cover concurrent polling, upload pickup,
+restart deduplication, failure stopping, cancellation, pause, transient retry and
+lost commit acknowledgment without repeating execution. No live call is involved.
+
+The ChatGPT development entrypoint is separate from this offline interface; it does
+not relabel a live executor as offline. Production/API-key rollout still needs
+appropriate accounting, recovery/republishing, service hosting and monitoring.
+
+## One-request development pilot
+
+The separate Bun coordinator connects **only** to the verified Neon `ben-local`
+direct endpoint (pinned in `src/pilot-config.ts`). Normal `sku research` remains
+standalone. Nothing starts automatically and no public live-execution API exists.
+
+```bash
+# Read-only list: request UUID, SKU and state; no worker credential access.
+bun run sku:pilot
+# Read-only inspection of exactly one request.
+bun run sku:pilot -- --request <request-uuid>
+# Explicit live run; consumes the separately authorized ChatGPT plan allowance.
+bun run sku:pilot -- --request <request-uuid> --allow-live
+```
+
+Use the already configured ignored `apps/server/.env.local` (`DATABASE_URL` and
+`ALLOWED_EMAILS`). Only a matching owner/admin account may operate the request;
+ambiguous accounts fail closed. Run `bun run sku login` separately if needed.
+No API-key or personal Pi/Codex fallback exists. A pooled, production or unknown
+DB endpoint is rejected before connecting. TLS verification remains enabled.
+
+The coordinator promotes only the selected paused request through existing
+admission/quota checks, claims only that UUID, renews its fenced lease, and spawns
+the Node durable worker with **no database, AWS or API-key environment settings**.
+Other requests stay unchanged. It saves validated evidence before publication;
+results become `awaiting_review` or `unresolved`, never approved catalog fields.
+Both the coordinator and child have a five-minute execution limit; the existing
+12-tool-call budget and an eight-turn limit apply. Hosted-search inner calls and
+output tokens are not a hard monetary cap; this is NOT a production service.
+
+Pilot jobs live separately under `<worker-state>/pilot-jobs/<request-uuid>/`.
+Completed saved JSON is identity-checked and reusable without inference. Existing
+interrupted SQLite without an exported result is NOT silently resumed. Ctrl+C,
+execution failure or invalid evidence fails the request without deleting local
+state; publication failures leave a fenced running claim. Do not reset/requeue it
+or start another generation to recover blindly. This first pilot has no automatic
+recovery or saved-result republishing CLI: inspect/fence saved work with an operator
+before recovery. No daemon, full-backlog enablement, provider billing rollout, schema
+push/migration or production deployment is performed by this command.
+
+Tests use faux inference/fixture pages and disposable DBs. No live research run is
+claimed for this bridge until explicitly authorized and observed.
+
 ## First run
 
 Requires Bun for workspace installation and **Node.js 22.19+** for execution.

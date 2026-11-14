@@ -1,0 +1,40 @@
+[
+  {
+    "documentType": "RECEIPT",
+    "receiptType": "Warehouse",
+    "transactionDate": "2026-11-07",
+    "transactionBarcode": "BENSTACK-DEMO-RECEIPT-V1",
+    "subTotal": 25,
+    "taxes": 0,
+    "total": 25,
+    "instantSavings": 0,
+    "warehouseName": "DEMO Warehouse (fictional)",
+    "warehouseNumber": 0,
+    "warehouseCity": "DEMO City",
+    "warehouseState": "NL",
+    "countryCode": "CA",
+    "membershipNumber": "DEMO-NOT-A-MEMBER",
+    "itemArray": [
+      {
+        "itemActualName": "DEMO OATS",
+        "itemDescription01": "DEMO OATS",
+        "itemNumber": "900000000001",
+        "itemDepartmentNumber": 0,
+        "itemUnitPriceAmount": 10,
+        "unit": 1,
+        "amount": 10
+      },
+      {
+        "itemActualName": "DEMO LAUNDRY",
+        "itemDescription01": "DEMO LAUNDRY",
+        "itemNumber": "900000000002",
+        "itemDepartmentNumber": 0,
+        "itemUnitPriceAmount": 15,
+        "unit": 1,
+        "amount": 15
+      }
+    ],
+    "tenderArray": [],
+    "subTaxes": null
+  }
+]

@@ -12,10 +12,13 @@ import { Skeleton } from "@benstack-aws/ui/components/skeleton";
 import { Link, useNavigate } from "@tanstack/react-router";
 
 import { authClient } from "@/lib/auth-client";
+import { isResearchDemo } from "@/lib/demo-mode";
 
 export default function UserMenu() {
   const navigate = useNavigate();
   const { data: session, isPending } = authClient.useSession();
+
+  if (isResearchDemo()) return <Button variant="outline" disabled>Demo owner (fake session)</Button>;
 
   if (isPending) {
     return <Skeleton className="h-9 w-24" />;

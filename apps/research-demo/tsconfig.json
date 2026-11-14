@@ -1,0 +1,4 @@
+{
+  "extends": "@benstack-aws/config/tsconfig.base.json",
+  "compilerOptions": { "noEmit": true }
+}

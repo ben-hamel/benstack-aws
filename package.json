@@ -37,7 +37,12 @@
     "db:down": "turbo -F @benstack-aws/db db:down",
     "db:prod": "./scripts/db-prod.sh",
     "build:lambda": "turbo -F @benstack-aws/receipt-processor build",
-    "sku": "bun run --cwd apps/sku-worker start --"
+    "sku": "bun run --cwd apps/sku-worker start --",
+    "sku:pilot": "bun run --cwd apps/sku-worker pilot --",
+    "sku:auto:offline": "bun run --cwd apps/sku-worker auto:offline --",
+    "sku:auto": "bun run --cwd apps/sku-worker auto:chatgpt --",
+    "demo:research": "bun --no-env-file apps/research-demo/src/start.ts",
+    "test:research-browser": "bun run --cwd apps/research-demo test:browser"
   },
   "dependencies": {
     "@benstack-aws/env": "workspace:*",

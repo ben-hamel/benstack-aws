@@ -5,6 +5,7 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import receiptsRoutes from "./modules/receipts/receipts.routes";
 import chatsRoutes from "./modules/chats/chats.routes";
+import productResearchRoutes from "./modules/product-research/product-research.routes";
 import { store, checkpointer } from "./modules/chats/chats.service";
 import type { AppEnv } from "./types/hono";
 
@@ -26,6 +27,7 @@ app.use(
 app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 app.route("/api/receipts", receiptsRoutes);
 app.route("/api/chats", chatsRoutes);
+app.route("/api/product-research", productResearchRoutes);
 
 app.get("/", (c) => {
   return c.text("OK");

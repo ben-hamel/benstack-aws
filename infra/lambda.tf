@@ -31,6 +31,7 @@ resource "aws_lambda_function" "receipt_processor" {
   environment {
     variables = {
       SSM_PARAMETER_PATH = "/benstack/database-url"
+      S3_RECEIPTS_BUCKET = aws_s3_bucket.receipts.id
     }
   }
 
@@ -62,6 +63,7 @@ resource "aws_lambda_function" "receipt_processor_serverless" {
   environment {
     variables = {
       SSM_PARAMETER_PATH = "/benstack/neon-database-url"
+      S3_RECEIPTS_BUCKET = aws_s3_bucket.receipts.id
     }
   }
 

@@ -1,0 +1,280 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Prepared staging Lambda Web Function - isolated from active Terraform and disabled until deployment is explicitly approved.",
+  "Metadata": {
+    "AWSToolsMetrics": {
+      "AWSAgentToolkit": "aws-cloudformation@2"
+    },
+    "com.aws.cloudformation.Context": {
+      "must": [
+        "No deployment is authorized. Template files alone create no resources.",
+        "Existing API, DNS, databases and workers must remain unchanged."
+      ],
+      "ref": [
+        {
+          "at": "infra/web-function-staging/README.md",
+          "has": "Safety gates, external prerequisites and validation limits"
+        }
+      ]
+    }
+  },
+  "Parameters": {
+    "EnableResources": {
+      "Type": "String",
+      "Default": "no",
+      "AllowedValues": [
+        "no",
+        "yes"
+      ],
+      "Description": "Keep no until explicit approval to incur costs. This is not a budget cap."
+    },
+    "FunctionName": {
+      "Type": "String",
+      "Default": "benstack-api-web-staging",
+      "AllowedPattern": "^benstack-[a-z0-9-]+-staging$",
+      "MaxLength": 64,
+      "Description": "New staging-only name; do not reuse the live API."
+    },
+    "ArtifactBucket": {
+      "Type": "String",
+      "MinLength": 3,
+      "MaxLength": 63,
+      "AllowedPattern": "^[a-z0-9][a-z0-9.-]+[a-z0-9]$",
+      "Description": "Existing approved versioned artifact bucket; no upload is performed by this template."
+    },
+    "ArtifactKey": {
+      "Type": "String",
+      "MinLength": 1,
+      "Description": "ZIP with index.js and package.json at its root."
+    },
+    "ArtifactVersion": {
+      "Type": "String",
+      "MinLength": 1,
+      "Description": "Immutable S3 object version ID."
+    },
+    "ExecutionRoleArn": {
+      "Type": "String",
+      "MinLength": 20,
+      "AllowedPattern": "^arn:aws:iam::[0-9]{12}:role/.+$",
+      "Description": "Separately reviewed staging execution role. Never supply the production role."
+    },
+    "RuntimeMode": {
+      "Type": "String",
+      "Default": "smoke",
+      "AllowedValues": [
+        "smoke",
+        "application"
+      ],
+      "Description": "Smoke never loads secrets, application modules, databases or model clients."
+    },
+    "StagingParameterPrefix": {
+      "Type": "String",
+      "Default": "/benstack-staging/",
+      "AllowedPattern": "^/benstack-staging/([a-zA-Z0-9_-]+/)*$",
+      "Description": "Staging-only SSM configuration path. Unused in smoke mode."
+    }
+  },
+  "Rules": {
+    "RequireDeploymentInputs": {
+      "RuleCondition": {
+        "Fn::Equals": [
+          {
+            "Ref": "EnableResources"
+          },
+          "yes"
+        ]
+      },
+      "Assertions": [
+        {
+          "Assert": {
+            "Fn::And": [
+              {
+                "Fn::Not": [
+                  {
+                    "Fn::Equals": [
+                      {
+                        "Ref": "ArtifactBucket"
+                      },
+                      ""
+                    ]
+                  }
+                ]
+              },
+              {
+                "Fn::Not": [
+                  {
+                    "Fn::Equals": [
+                      {
+                        "Ref": "ArtifactKey"
+                      },
+                      ""
+                    ]
+                  }
+                ]
+              },
+              {
+                "Fn::Not": [
+                  {
+                    "Fn::Equals": [
+                      {
+                        "Ref": "ArtifactVersion"
+                      },
+                      ""
+                    ]
+                  }
+                ]
+              },
+              {
+                "Fn::Not": [
+                  {
+                    "Fn::Equals": [
+                      {
+                        "Ref": "ExecutionRoleArn"
+                      },
+                      ""
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "AssertDescription": "Explicit artifact location/version and reviewed staging execution role are required."
+        }
+      ]
+    }
+  },
+  "Conditions": {
+    "ResourcesApproved": {
+      "Fn::Equals": [
+        {
+          "Ref": "EnableResources"
+        },
+        "yes"
+      ]
+    }
+  },
+  "Resources": {
+    "WebFunction": {
+      "Type": "AWS::Lambda::WebFunction",
+      "Condition": "ResourcesApproved",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Parallel HTTP server; does not replace the current event Lambda.",
+          "must": [
+            "Unique staging-only function name; no production DNS changes."
+          ]
+        }
+      },
+      "Properties": {
+        "FunctionName": {
+          "Ref": "FunctionName"
+        }
+      }
+    },
+    "Revision": {
+      "Type": "AWS::Lambda::WebFunctionRevision",
+      "Condition": "ResourcesApproved",
+      "DependsOn": "WebFunction",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Immutable bundled Node server; smoke mode permits initial transport testing without app dependencies.",
+          "must": [
+            "External role must be staging-only and trust lambda.amazonaws.com.",
+            "ZIP must bundle SDK clients and use arm64-compatible native dependencies.",
+            "Application mode requires verified isolated staging DB and receipts bucket."
+          ]
+        }
+      },
+      "Properties": {
+        "FunctionName": {
+          "Ref": "FunctionName"
+        },
+        "BuildConfig": {
+          "CodeConfig": {
+            "S3Object": {
+              "Bucket": {
+                "Ref": "ArtifactBucket"
+              },
+              "Key": {
+                "Ref": "ArtifactKey"
+              },
+              "VersionId": {
+                "Ref": "ArtifactVersion"
+              }
+            }
+          },
+          "RuntimeConfig": {
+            "Runtime": "nodejs24.x"
+          }
+        },
+        "ServiceConfig": {
+          "ExecutionRoleArn": {
+            "Ref": "ExecutionRoleArn"
+          },
+          "TimeoutSeconds": 60,
+          "MaxConcurrencyPerEnvironment": 4,
+          "EnvironmentVariables": {
+            "NODE_ENV": "production",
+            "WEB_FUNCTION_MODE": {
+              "Ref": "RuntimeMode"
+            },
+            "WEB_FUNCTION_SSM_PREFIX": {
+              "Ref": "StagingParameterPrefix"
+            }
+          }
+        }
+      }
+    },
+    "Endpoint": {
+      "Type": "AWS::Lambda::WebFunctionEndpoint",
+      "Condition": "ResourcesApproved",
+      "DependsOn": "WebFunction",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Single-region, IAM-authenticated transport test endpoint. Starts with all requests blocked.",
+          "must": [
+            "Keep IAM authentication until browser-facing CloudFront OAC and access policy are reviewed.",
+            "RateLimit zero blocks requests but does not guarantee zero costs after deployment."
+          ]
+        }
+      },
+      "Properties": {
+        "FunctionName": {
+          "Ref": "FunctionName"
+        },
+        "EndpointName": "staging",
+        "EndpointType": "HomeRegion",
+        "AuthType": "IamAuth",
+        "RevisionWeights": [
+          {
+            "RevisionId": {
+              "Fn::GetAtt": [
+                "Revision",
+                "RevisionId"
+              ]
+            },
+            "Weight": 100
+          }
+        ],
+        "ScalingConfig": {
+          "MaxEnvironments": 2
+        },
+        "ThrottleConfig": {
+          "RateLimit": 0
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "EndpointDomainName": {
+      "Condition": "ResourcesApproved",
+      "Description": "Staging only; requests remain throttled until separately approved.",
+      "Value": {
+        "Fn::GetAtt": [
+          "Endpoint",
+          "DomainName"
+        ]
+      }
+    }
+  }
+}

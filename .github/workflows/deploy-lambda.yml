@@ -7,6 +7,7 @@ on:
     paths:
       - "apps/receipt-processor/**"
       - "packages/db/**"
+      - "packages/receipt-import/**"
       - "bun.lock"
       - ".github/workflows/deploy-lambda.yml"
 

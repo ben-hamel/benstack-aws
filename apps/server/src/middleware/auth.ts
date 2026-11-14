@@ -1,5 +1,5 @@
 import { auth } from "@benstack-aws/auth";
-import { db, eq } from "@benstack-aws/db";
+import { and, db, eq } from "@benstack-aws/db";
 import * as schema from "@benstack-aws/db/schema/auth";
 import { createMiddleware } from "hono/factory";
 import type { AppEnv } from "../types/hono";
@@ -41,6 +41,12 @@ export const orgMiddleware = createMiddleware<AppEnv>(async (c, next) => {
   if (!orgId) {
     return c.json({ error: "No active organization" }, { status: 403 });
   }
+
+  // An active organization in the session is a selection, not proof of current
+  // membership (it may be stale after removal or an organization switch).
+  const [currentMembership] = await db.select({ id: schema.member.id }).from(schema.member)
+    .where(and(eq(schema.member.userId, user.id), eq(schema.member.organizationId, orgId))).limit(1);
+  if (!currentMembership) return c.json({ error: "No current organization membership" }, { status: 403 });
 
   c.set("orgId", orgId);
   await next();

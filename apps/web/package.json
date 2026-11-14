@@ -8,11 +8,13 @@
     "build": "vite build",
     "serve": "vite preview",
     "start": "vite",
-    "check-types": "vite build && tsc --noEmit"
+    "check-types": "vite build && tsc --noEmit",
+    "test:research": "tsc --noEmit --project test/tsconfig.json && bun test test/product-research-evidence.test.tsx"
   },
   "dependencies": {
     "@ai-sdk/react": "^3.0.170",
     "@benstack-aws/auth": "workspace:*",
+    "@benstack-aws/product-research": "workspace:*",
     "@benstack-aws/env": "workspace:*",
     "@benstack-aws/ui": "workspace:*",
     "@hookform/resolvers": "^5.1.1",
@@ -30,6 +32,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@types/bun": "catalog:",
     "@benstack-aws/config": "workspace:*",
     "@tanstack/react-router-devtools": "^1.141.1",
     "@tanstack/router-plugin": "^1.141.1",

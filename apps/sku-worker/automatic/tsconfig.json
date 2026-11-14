@@ -1,0 +1,4 @@
+{
+  "extends": "../pilot/tsconfig.json",
+  "include": ["cli.ts", "chatgpt.ts"]
+}

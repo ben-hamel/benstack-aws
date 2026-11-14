@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as ReceiptsUploadRouteImport } from './routes/receipts-upload'
 import { Route as ReceiptsRouteImport } from './routes/receipts'
+import { Route as ProductResearchRouteImport } from './routes/product-research'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ChatRouteImport } from './routes/chat'
@@ -24,6 +25,11 @@ const ReceiptsUploadRoute = ReceiptsUploadRouteImport.update({
 const ReceiptsRoute = ReceiptsRouteImport.update({
   id: '/receipts',
   path: '/receipts',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProductResearchRoute = ProductResearchRouteImport.update({
+  id: '/product-research',
+  path: '/product-research',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -52,6 +58,7 @@ export interface FileRoutesByFullPath {
   '/chat': typeof ChatRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
+  '/product-research': typeof ProductResearchRoute
   '/receipts': typeof ReceiptsRoute
   '/receipts-upload': typeof ReceiptsUploadRoute
 }
@@ -60,6 +67,7 @@ export interface FileRoutesByTo {
   '/chat': typeof ChatRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
+  '/product-research': typeof ProductResearchRoute
   '/receipts': typeof ReceiptsRoute
   '/receipts-upload': typeof ReceiptsUploadRoute
 }
@@ -69,6 +77,7 @@ export interface FileRoutesById {
   '/chat': typeof ChatRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
+  '/product-research': typeof ProductResearchRoute
   '/receipts': typeof ReceiptsRoute
   '/receipts-upload': typeof ReceiptsUploadRoute
 }
@@ -79,16 +88,25 @@ export interface FileRouteTypes {
     | '/chat'
     | '/dashboard'
     | '/login'
+    | '/product-research'
     | '/receipts'
     | '/receipts-upload'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/chat' | '/dashboard' | '/login' | '/receipts' | '/receipts-upload'
+  to:
+    | '/'
+    | '/chat'
+    | '/dashboard'
+    | '/login'
+    | '/product-research'
+    | '/receipts'
+    | '/receipts-upload'
   id:
     | '__root__'
     | '/'
     | '/chat'
     | '/dashboard'
     | '/login'
+    | '/product-research'
     | '/receipts'
     | '/receipts-upload'
   fileRoutesById: FileRoutesById
@@ -98,6 +116,7 @@ export interface RootRouteChildren {
   ChatRoute: typeof ChatRoute
   DashboardRoute: typeof DashboardRoute
   LoginRoute: typeof LoginRoute
+  ProductResearchRoute: typeof ProductResearchRoute
   ReceiptsRoute: typeof ReceiptsRoute
   ReceiptsUploadRoute: typeof ReceiptsUploadRoute
 }
@@ -116,6 +135,13 @@ declare module '@tanstack/react-router' {
       path: '/receipts'
       fullPath: '/receipts'
       preLoaderRoute: typeof ReceiptsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/product-research': {
+      id: '/product-research'
+      path: '/product-research'
+      fullPath: '/product-research'
+      preLoaderRoute: typeof ProductResearchRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -154,6 +180,7 @@ const rootRouteChildren: RootRouteChildren = {
   ChatRoute: ChatRoute,
   DashboardRoute: DashboardRoute,
   LoginRoute: LoginRoute,
+  ProductResearchRoute: ProductResearchRoute,
   ReceiptsRoute: ReceiptsRoute,
   ReceiptsUploadRoute: ReceiptsUploadRoute,
 }

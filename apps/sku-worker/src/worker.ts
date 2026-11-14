@@ -2,13 +2,20 @@ import type { Models } from "@earendil-works/pi-ai/models";
 import { obj, oneOf, str } from "@earendil-works/pi-schema";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import {
-  AssistantEntry, createRegistry, defineDoc, defineExtension, defineTool, Harness, type Cursor, type EntryRecord,
+  AssistantEntry, createRegistry, defineDoc, defineExtension, defineTool, Harness, type Cursor, type EntryId, type EntryRecord,
 } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { join } from "node:path";
 import { privateDirectory, UserError } from "./state.ts";
 import { COSTCO_SITES, type ResearchWeb, validateSku } from "./web.ts";
 import { assessEvidence, EvidenceReviewDoc } from "./evidence-review.ts";
+import { resultFromEntries } from "./result.ts";
+import type { ResearchResult } from "@benstack-aws/product-research/contracts";
+
+const ResultDoc = defineDoc<{ result: ResearchResult | null }>({
+  kind: "benstack.sku-proposal", version: 1, scope: "conversation", history: "latest", fork: "initial",
+  initial: () => ({ result: null }), checkpointWhen: () => false,
+});
 
 export const MAX_TOOL_CALLS = 12;
 
@@ -54,6 +61,7 @@ export async function openJob(options: {
   web: ResearchWeb;
   initial?: { sku: string; model: { provider: string; modelId: string } };
   log?: (message: string) => void;
+  maxTurns?: number;
 }) {
   await privateDirectory(options.directory);
   const log = options.log ?? (() => undefined);
@@ -116,6 +124,7 @@ export async function openJob(options: {
         model: options.initial.model,
         thinkingLevel: "low",
         instructions: INSTRUCTIONS,
+        ...(options.maxTurns ? { maxTurns: options.maxTurns } : {}),
       },
       init: async (tx, id) => {
         const job = await tx.doc(JobDoc, id);
@@ -172,7 +181,22 @@ export async function openJob(options: {
       return answer;
     }
     const review = async () => (await harness.snapshot(EvidenceReviewDoc, root.id, BACKGROUND_CONTEXT))?.summary ?? null;
-    return { harness, root, job, run, review, close: () => harness.close(BACKGROUND_CONTEXT) };
+    async function result(): Promise<ResearchResult> {
+      const saved = await harness.snapshot(ResultDoc, root.id, BACKGROUND_CONTEXT);
+      if (saved?.result) return saved.result;
+      const assessment = await review();
+      if (!assessment) throw new UserError("Run and assess the job before exporting a proposal.");
+      const entries: EntryRecord[] = [];
+      let cursor: Cursor | undefined;
+      do {
+        const page = await root.entries({ order: "ascending", maxEntryId: assessment.answerId as EntryId }, 256, cursor, BACKGROUND_CONTEXT);
+        entries.push(...page.items); cursor = page.next;
+      } while (cursor && entries.length < 2_048);
+      const proposal = resultFromEntries(job!.sku, assessment.answerId, `${job!.model.provider}/${job!.model.modelId}`, entries, cursor === undefined);
+      await root.commit(async (tx) => { (await tx.doc(ResultDoc, root.id)).result = proposal; }, BACKGROUND_CONTEXT);
+      return proposal;
+    }
+    return { harness, root, job, run, review, result, close: () => harness.close(BACKGROUND_CONTEXT) };
   } catch (error) {
     await harness.close(BACKGROUND_CONTEXT);
     throw error;

@@ -8,6 +8,34 @@
       "when": 1776098382346,
       "tag": "0000_happy_invaders",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794016171785,
+      "tag": "0001_receipt_import_baseline",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794016612294,
+      "tag": "0002_product_research_admission",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794018081462,
+      "tag": "0003_product_research_review",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794024542880,
+      "tag": "0004_product_research_action_keys",
+      "breakpoints": true
     }
   ]
 }

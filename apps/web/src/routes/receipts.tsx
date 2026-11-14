@@ -1,6 +1,8 @@
 import { env } from "@benstack-aws/env/web";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
+import type { ProductValues } from "@benstack-aws/product-research/contracts";
+import { isResearchDemo } from "@/lib/demo-mode";
 import { ChevronDownIcon, ChevronUpIcon, FuelIcon, ReceiptTextIcon, Trash2Icon, UploadIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { authClient } from "@/lib/auth-client";
@@ -52,6 +54,8 @@ type ReceiptDetail = Receipt & {
     taxFlag: string | null;
     fuelQuantityLitres: string | null;
     fuelPricePerLitre: string | null;
+    product?: (ProductValues & { version: number }) | null;
+    research?: { requestId: string; state: string; reason: string | null } | null;
   }[];
   tenders: {
     id: string;
@@ -141,7 +145,9 @@ function ReceiptRow({
                     .map((item) => (
                       <div key={item.id} className="flex items-center justify-between text-sm">
                         <span className="truncate flex-1 min-w-0">
-                          {item.description}
+                          <span>{item.product?.name ?? item.description}</span>
+                          {item.product && <span className="block text-xs text-muted-foreground">Approved metadata · Receipt: {item.description}{[item.product.brand, item.product.variant, item.product.sizeText, item.product.packText].filter(Boolean).length ? ` · ${[item.product.brand, item.product.variant, item.product.sizeText, item.product.packText].filter(Boolean).join(" · ")}` : ""}</span>}
+                          {item.research && <Link className="block text-xs underline text-muted-foreground" to="/product-research" search={{ request: item.research.requestId }}>Research: {item.research.state.replaceAll("_", " ")}</Link>}
                           {item.taxFlag === "Y" && (
                             <span className="ml-1 text-xs text-muted-foreground">T</span>
                           )}
@@ -355,7 +361,13 @@ function RouteComponent() {
         body: file,
         headers: { "Content-Type": "application/json" },
       });
-      if (!putRes.ok) throw new Error("Failed to upload file to S3");
+      if (!putRes.ok) {
+        if (isResearchDemo()) {
+          const body = await putRes.json().catch(() => ({})) as { error?: string };
+          throw new Error(body.error ?? "The demo accepts only the bundled fictional receipt.");
+        }
+        throw new Error("Failed to upload file to S3");
+      }
 
       setUploadState({ status: "pending", jobId: newJobId });
     } catch (err) {
@@ -430,7 +442,7 @@ function RouteComponent() {
       {job?.status === "done" && (
         <div className="rounded-lg border p-3 text-sm border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-400">
           {(job.imported ?? 0)} receipt{(job.imported ?? 0) !== 1 ? "s" : ""} imported
-          {(job.skipped ?? 0) > 0 && `, ${job.skipped} skipped`}.
+          {(job.skipped ?? 0) > 0 && `, ${job.skipped} skipped`}. Product research runs separately; check the Product research inbox for paused work or proposals requiring approval.
         </div>
       )}
 

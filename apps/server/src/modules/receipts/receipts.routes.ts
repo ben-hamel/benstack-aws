@@ -1,4 +1,7 @@
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
+import { HTTPException } from "hono/http-exception";
+import { MAX_UPLOAD_BYTES, ReceiptAuthorizationError, ReceiptValidationError } from "@benstack-aws/receipt-import";
 import {
   authMiddleware,
   orgMiddleware,
@@ -50,41 +53,41 @@ receipts.get("/jobs/:id", async (c) => {
   }
 });
 
-receipts.post("/upload", async (c) => {
+receipts.post("/upload", bodyLimit({ maxSize: MAX_UPLOAD_BYTES }), async (c) => {
   const user = c.get("user");
   const orgId = c.get("orgId");
 
   if (!user) return c.json({ error: "Unauthorized" }, { status: 401 });
   if (!orgId) return c.json({ error: "No active organization" }, { status: 403 });
 
-  let data: unknown[];
-
-  const contentType = c.req.header("content-type") || "";
-
-  if (contentType.includes("multipart/form-data")) {
-    const formData = await c.req.formData();
-    const file = formData.get("file");
-    if (!file || !(file instanceof File)) {
-      return c.json({ error: "No file provided" }, { status: 400 });
-    }
-    const text = await file.text();
-    const parsed = JSON.parse(text);
-    data = Array.isArray(parsed) ? parsed : parsed.receipts;
-  } else {
-    const body = await c.req.json();
-    data = Array.isArray(body) ? body : body.receipts;
-  }
-
-  if (!Array.isArray(data) || data.length === 0) {
-    return c.json({ error: "No receipts found in upload" }, { status: 400 });
-  }
-
+  let data: unknown;
   try {
-    const result = await insertReceipts(data as never[], orgId, user.id);
-    return c.json(result);
+    if ((c.req.header("content-type") ?? "").includes("multipart/form-data")) {
+      const formData = await c.req.formData();
+      const file = formData.get("file");
+      if (!(file instanceof File)) return c.json({ error: "No file provided" }, 400);
+      data = JSON.parse(await file.text());
+    } else {
+      data = await c.req.json();
+    }
   } catch (error) {
-    console.error("Failed to import receipts:", error);
-    return c.json({ error: "Failed to import receipts" }, { status: 500 });
+    // Hono uses BodyLimitError while reading chunked bodies, HTTPException
+    // when a Content-Length is already over the limit. Preserve both as 413.
+    if ((error instanceof HTTPException && error.status === 413)
+      || (error instanceof Error && error.name === "BodyLimitError")) {
+      return c.json({ error: "Receipt upload exceeds the size limit." }, 413);
+    }
+    return c.json({ error: "Invalid JSON or multipart receipt upload." }, 400);
+  }
+  try {
+    return c.json(await insertReceipts(data, orgId, user.id));
+  } catch (error) {
+    if (error instanceof ReceiptAuthorizationError) return c.json({ error: error.message }, 403);
+    if (error instanceof ReceiptValidationError) {
+      return c.json({ error: "Invalid Costco receipt JSON or upload limits exceeded." }, 400);
+    }
+    console.error("Receipt import failed; diagnostics withheld.");
+    return c.json({ error: "Failed to import receipts; retry the upload." }, 500);
   }
 });
 
@@ -122,11 +125,13 @@ receipts.get("/:id", async (c) => {
 
 receipts.delete("/", async (c) => {
   const orgId = c.get("orgId");
+  const user = c.get("user");
 
+  if (!user) return c.json({ error: "Unauthorized" }, { status: 401 });
   if (!orgId) return c.json({ error: "No active organization" }, { status: 403 });
 
   try {
-    const result = await deleteAllReceipts(orgId);
+    const result = await deleteAllReceipts(orgId, user.id);
     return c.json(result);
   } catch (error) {
     console.error("Failed to delete receipts:", error);

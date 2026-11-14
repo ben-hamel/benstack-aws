@@ -1,0 +1,14 @@
+{
+  "name": "@benstack-aws/product-research",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/service.ts", "./*": "./src/*.ts" },
+  "scripts": { "check-types": "tsc --noEmit", "test": "bun test test" },
+  "dependencies": {
+    "@benstack-aws/db": "workspace:*",
+    "@benstack-aws/receipt-import": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "zod": "catalog:"
+  },
+  "devDependencies": { "@benstack-aws/config": "workspace:*", "@types/bun": "catalog:", "typescript": "^5" }
+}

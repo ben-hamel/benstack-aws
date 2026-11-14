@@ -16,7 +16,7 @@ export const Route = createFileRoute("/receipts-upload")({
 
 const SERVER_URL = env.VITE_SERVER_URL;
 
-type UploadResult = { imported: number; skipped: number; total: number };
+type UploadResult = { imported: number; skipped: number; total: number; research?: { queued: number; paused: number; reused: number } };
 
 type State =
   | { status: "idle" }
@@ -92,6 +92,7 @@ function RouteComponent() {
       {state.status === "done" && (
         <div className="rounded-lg border p-3 text-sm border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-400">
           {state.result.imported} imported, {state.result.skipped} skipped (of {state.result.total} total).
+          {state.result.research && <p>{state.result.research.queued} products queued, {state.result.research.paused} paused, {state.result.research.reused} existing requests reused. Review results in Product research; receipt import does not approve products.</p>}
         </div>
       )}
 

@@ -1,8 +1,35 @@
 # Receipt-triggered product research and approval
 
-Status: Phase 1 implementation authorized on 2026-11-07; deployment and paid calls remain gated.
+Status: Historical organization-scoped specification; superseded where noted below.
 Date: 2026-11-07
 Baseline: SKU worker migration commit `0ce6189` (Pi Durable 1.5.0).
+
+> **Current direction:** [Shared SKU catalog and system-admin research](shared-sku-catalog.md)
+> is authoritative for the next refactor. Products/research are to become shared
+> across users; review is system-admin-only, not organization-owner-facing.
+> The new spec also supersedes this document's migration-first schema workflow
+> and tenant-cascading catalog deletion. Follow AGENTS.md's `db:push` guidance.
+> The sections below preserve the original design and historical launch gates;
+> they are not a current implementation/deployment checkpoint. Explicit local
+> ChatGPT-plan development runs were subsequently approved and tested. Read
+> [STATUS.md](../../STATUS.md) for observed progress and remaining authorization.
+> No shared-catalog implementation is authorized merely by either specification.
+
+Implementation checkpoint: shared atomic imports/admission, an opt-in offline
+Pi Durable bridge and structured-result publisher, scoped approval/rejection,
+re-research and decision audit, deletion cancellation, and the review inbox are
+implemented locally. See [import rollout notes](../../packages/receipt-import/README.md)
+and [worker/review implementation notes](../../packages/product-research/README.md).
+Paid execution remains absent/disabled. The disposable local browser demo now
+verifies sample upload, selected-field approval/rejection and unchanged receipt
+values using fictional data; see [demo instructions](../../apps/research-demo/README.md).
+Native PostgreSQL CI, production auth/provider acceptance, legacy-data/schema-copy
+rehearsal, hosted provider/budget/worker setup, artifact retention, and recovery
+gates are not complete. New migrations and the
+Lambda bucket setting must be staged before deploying even the paused importer.
+The initial exporter intentionally leaves search-only prose unresolved and does
+not infer variant or pack fields. Legacy receipt lines without admission identity
+associations are not silently backfilled.
 
 ## 1. Goal and user experience
 
