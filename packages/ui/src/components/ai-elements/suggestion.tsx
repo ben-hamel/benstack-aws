@@ -1,27 +1,23 @@
 "use client";
 
 import { Button } from "@benstack-aws/ui/components/button";
-import {
-  ScrollArea,
-  ScrollBar,
-} from "@benstack-aws/ui/components/scroll-area";
 import { cn } from "@benstack-aws/ui/lib/utils";
 import type { ComponentProps } from "react";
 import { useCallback } from "react";
 
-export type SuggestionsProps = ComponentProps<typeof ScrollArea>;
+export type SuggestionsProps = ComponentProps<"div">;
 
 export const Suggestions = ({
   className,
   children,
   ...props
 }: SuggestionsProps) => (
-  <ScrollArea className="w-full overflow-x-auto whitespace-nowrap" {...props}>
-    <div className={cn("flex w-max flex-nowrap items-center gap-2", className)}>
-      {children}
-    </div>
-    <ScrollBar className="hidden" orientation="horizontal" />
-  </ScrollArea>
+  <div
+    className={cn("flex scroll-fade-x scrollbar-none gap-2 overflow-x-auto overscroll-x-contain", className)}
+    {...props}
+  >
+    {children}
+  </div>
 );
 
 export type SuggestionProps = Omit<ComponentProps<typeof Button>, "onClick"> & {
@@ -44,7 +40,7 @@ export const Suggestion = ({
 
   return (
     <Button
-      className={cn("cursor-pointer rounded-full px-4", className)}
+      className={cn("shrink-0 cursor-pointer", className)}
       onClick={handleClick}
       size={size}
       type="button"

@@ -1,6 +1,8 @@
 "use client";
 
 import { Button } from "@benstack-aws/ui/components/button";
+import { Bubble, BubbleContent } from "@benstack-aws/ui/components/bubble";
+import { Message as MessageRoot, MessageContent as MessageBody, MessageFooter } from "@benstack-aws/ui/components/message";
 import {
   ButtonGroup,
   ButtonGroupText,
@@ -34,36 +36,32 @@ export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"];
 };
 
+const MessageRole = createContext<UIMessage["role"]>("assistant");
+
 export const Message = ({ className, from, ...props }: MessageProps) => (
-  <div
-    className={cn(
-      "group flex w-full max-w-[95%] flex-col gap-2",
-      from === "user" ? "is-user ml-auto justify-end" : "is-assistant",
-      className
-    )}
-    {...props}
-  />
+  <MessageRole.Provider value={from}>
+    <MessageRoot
+      align={from === "user" ? "end" : "start"}
+      className={cn("group", from === "user" ? "is-user" : "is-assistant", className)}
+      {...props}
+    />
+  </MessageRole.Provider>
 );
 
 export type MessageContentProps = HTMLAttributes<HTMLDivElement>;
 
-export const MessageContent = ({
-  children,
-  className,
-  ...props
-}: MessageContentProps) => (
-  <div
-    className={cn(
-      "is-user:dark flex w-fit min-w-0 max-w-full flex-col gap-2 overflow-hidden text-sm",
-      "group-[.is-user]:ml-auto group-[.is-user]:rounded-lg group-[.is-user]:bg-secondary group-[.is-user]:px-4 group-[.is-user]:py-3 group-[.is-user]:text-foreground",
-      "group-[.is-assistant]:text-foreground",
-      className
-    )}
-    {...props}
-  >
-    {children}
-  </div>
-);
+export const MessageContent = ({ children, className, ...props }: MessageContentProps) => {
+  const role = useContext(MessageRole);
+  return (
+    <MessageBody className={cn("text-sm", className)} {...props}>
+      {role === "user" ? (
+        <Bubble align="end" variant="muted">
+          <BubbleContent className="text-sm">{children}</BubbleContent>
+        </Bubble>
+      ) : children}
+    </MessageBody>
+  );
+};
 
 export type MessageActionsProps = ComponentProps<"div">;
 
@@ -72,9 +70,9 @@ export const MessageActions = ({
   children,
   ...props
 }: MessageActionsProps) => (
-  <div className={cn("flex items-center gap-1", className)} {...props}>
+  <MessageFooter className={cn("flex items-center gap-1 px-0", className)} {...props}>
     {children}
-  </div>
+  </MessageFooter>
 );
 
 export type MessageActionProps = ComponentProps<typeof Button> & {
@@ -91,7 +89,7 @@ export const MessageAction = ({
   ...props
 }: MessageActionProps) => {
   const button = (
-    <Button size={size} type="button" variant={variant} {...props}>
+    <Button aria-label={label || tooltip} size={size} type="button" variant={variant} {...props}>
       {children}
       <span className="sr-only">{label || tooltip}</span>
     </Button>
@@ -101,7 +99,7 @@ export const MessageAction = ({
     return (
       <TooltipProvider>
         <Tooltip>
-          <TooltipTrigger>{button}</TooltipTrigger>
+          <TooltipTrigger render={button} />
           <TooltipContent>
             <p>{tooltip}</p>
           </TooltipContent>

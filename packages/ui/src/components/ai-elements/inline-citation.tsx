@@ -1,6 +1,6 @@
 "use client";
 
-import { Badge } from "@benstack-aws/ui/components/badge";
+import { Button } from "@benstack-aws/ui/components/button";
 import type { CarouselApi } from "@benstack-aws/ui/components/carousel";
 import {
   Carousel,
@@ -50,10 +50,10 @@ export const InlineCitationText = ({
 export type InlineCitationCardProps = ComponentProps<typeof HoverCard>;
 
 export const InlineCitationCard = (props: InlineCitationCardProps) => (
-  <HoverCard closeDelay={0} openDelay={0} {...props} />
+  <HoverCard {...props} />
 );
 
-export type InlineCitationCardTriggerProps = ComponentProps<typeof Badge> & {
+export type InlineCitationCardTriggerProps = ComponentProps<typeof Button> & {
   sources: string[];
 };
 
@@ -62,7 +62,7 @@ export const InlineCitationCardTrigger = ({
   className,
   ...props
 }: InlineCitationCardTriggerProps) => (
-  <HoverCardTrigger render={<Badge className={cn("ml-1 rounded-full", className)} variant="secondary" {...props} />}>{sources[0] ? (
+  <HoverCardTrigger delay={10} closeDelay={100} render={<Button className={cn("ml-1", className)} type="button" variant="secondary" size="xs" {...props} />}>{sources[0] ? (
             <>
               {new URL(sources[0]).hostname}{" "}
               {sources.length > 1 && `+${sources.length - 1}`}
@@ -246,28 +246,26 @@ export type InlineCitationSourceProps = ComponentProps<"div"> & {
 };
 
 export const InlineCitationSource = ({
-  title,
-  url,
-  description,
-  className,
-  children,
-  ...props
-}: InlineCitationSourceProps) => (
-  <div className={cn("space-y-1", className)} {...props}>
-    {title && (
-      <h4 className="truncate font-medium text-sm leading-tight">{title}</h4>
-    )}
-    {url && (
-      <p className="truncate break-all text-muted-foreground text-xs">{url}</p>
-    )}
-    {description && (
-      <p className="line-clamp-3 text-muted-foreground text-sm leading-relaxed">
-        {description}
-      </p>
-    )}
-    {children}
-  </div>
-);
+  title, url, description, className, children, ...props
+}: InlineCitationSourceProps) => {
+  let href: string | undefined;
+  try {
+    const parsed = new URL(url ?? "");
+    if (["http:", "https:"].includes(parsed.protocol) && !parsed.username && !parsed.password) href = parsed.href;
+  } catch { /* Invalid source URLs remain plain text. */ }
+  return (
+    <div className={cn("space-y-1", className)} {...props}>
+      {title && <h4 className="truncate text-sm font-medium leading-tight">{title}</h4>}
+      {url && (href ? (
+        <a href={href} target="_blank" rel="noopener noreferrer" className="block truncate break-all text-xs text-muted-foreground underline-offset-4 hover:underline">
+          {url}<span className="sr-only"> (opens in a new tab)</span>
+        </a>
+      ) : <p className="truncate break-all text-xs text-muted-foreground">{url}</p>)}
+      {description && <p className="line-clamp-3 text-sm leading-relaxed text-muted-foreground">{description}</p>}
+      {children}
+    </div>
+  );
+};
 
 export type InlineCitationQuoteProps = ComponentProps<"blockquote">;
 

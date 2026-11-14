@@ -39,7 +39,9 @@ import {
 } from "@benstack-aws/ui/components/ai-elements/inline-citation";
 import { Suggestion, Suggestions } from "@benstack-aws/ui/components/ai-elements/suggestion";
 import { HoverCardTrigger } from "@benstack-aws/ui/components/hover-card";
-import { Badge } from "@benstack-aws/ui/components/badge";
+import { Button } from "@benstack-aws/ui/components/button";
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupTextarea } from "@benstack-aws/ui/components/input-group";
+import { MessageScrollerItem } from "@benstack-aws/ui/components/message-scroller";
 import {
   Dialog,
   DialogContent,
@@ -418,7 +420,7 @@ function ChatSession({
           {messages.length > 0 && (
             <>
             {messages.map((message) => (
-              <div key={message.id} className="space-y-2">
+              <MessageScrollerItem key={message.id} messageId={message.id} scrollAnchor={message.role === "user"} className="space-y-2">
                 {message.parts.map((part, index) => {
                   if (part.type === "text") {
                     return (
@@ -456,7 +458,7 @@ function ChatSession({
 
                   return null;
                 })}
-              </div>
+              </MessageScrollerItem>
             ))}
             {status === "submitted" && <ThinkingIndicator />}
             </>
@@ -489,40 +491,35 @@ function ChatSession({
           </div>
         )}
         <form ref={formRef} onSubmit={handleSubmit}>
-        <div className="flex items-end gap-2 rounded-lg border bg-card p-3">
-          <textarea
-            className="min-h-20 flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-            name="message"
-            placeholder="Ask about your receipts..."
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                event.currentTarget.form?.requestSubmit();
-              }
-            }}
-            disabled={status !== "ready"}
-          />
-          {status === "submitted" || status === "streaming" ? (
-            <button
-              type="button"
-              onClick={stop}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-md border"
-            >
-              <SquareIcon className="h-4 w-4" />
-            </button>
-          ) : (
-            <button
-              type="submit"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-md border disabled:opacity-50"
-              disabled={!draft.trim()}
-            >
-              <SendIcon className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-      </form>
+          <InputGroup>
+            <InputGroupTextarea
+              className="min-h-20 p-3"
+              name="message"
+              aria-label="Message"
+              placeholder="Ask about your receipts..."
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  event.currentTarget.form?.requestSubmit();
+                }
+              }}
+              disabled={status !== "ready"}
+            />
+            <InputGroupAddon align="block-end" className="justify-end">
+              {status === "submitted" || status === "streaming" ? (
+                <InputGroupButton type="button" variant="outline" size="icon-sm" aria-label="Stop response" onClick={stop}>
+                  <SquareIcon className="h-4 w-4" />
+                </InputGroupButton>
+              ) : (
+                <InputGroupButton type="submit" size="icon-sm" aria-label="Send message" disabled={!draft.trim()}>
+                  <SendIcon className="h-4 w-4" />
+                </InputGroupButton>
+              )}
+            </InputGroupAddon>
+          </InputGroup>
+        </form>
       </div>
     </div>
   );
@@ -564,15 +561,13 @@ function ReceiptChips({ output }: { output: unknown }) {
         {rows.map((row) => (
           <InlineCitation key={row.id}>
             <InlineCitationCard>
-              <HoverCardTrigger>
-                <Badge
-                  variant="secondary"
-                  className="cursor-pointer gap-1 rounded-full"
-                  onClick={() => setSelectedId(row.id)}
-                >
-                  <ReceiptTextIcon className="h-3 w-3" />
-                  {row.store ?? "Unknown"} · {formatReceiptDate(row.date)} · {formatCurrency(row.total)}
-                </Badge>
+              <HoverCardTrigger
+                delay={10}
+                closeDelay={100}
+                render={<Button type="button" variant="secondary" size="xs" className="cursor-pointer gap-1" onClick={() => setSelectedId(row.id)} />}
+              >
+                <ReceiptTextIcon className="h-3 w-3" />
+                {row.store ?? "Unknown"} · {formatReceiptDate(row.date)} · {formatCurrency(row.total)}
               </HoverCardTrigger>
               <InlineCitationCardBody>
                 <div className="p-4">

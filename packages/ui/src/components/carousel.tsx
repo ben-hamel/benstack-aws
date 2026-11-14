@@ -1,9 +1,11 @@
+"use client"
+
 import * as React from "react"
+import { cn } from "cn"
 import useEmblaCarousel, {
   type UseEmblaCarouselType,
 } from "embla-carousel-react"
 
-import { cn } from "@benstack-aws/ui/lib/utils"
 import { Button } from "@benstack-aws/ui/components/button"
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react"
 
@@ -185,7 +187,7 @@ function CarouselPrevious({
       className={cn(
         "absolute touch-manipulation",
         orientation === "horizontal"
-          ? "top-1/2 -left-12 -translate-y-1/2"
+          ? "inset-y-0 -left-12 my-auto"
           : "-top-12 left-1/2 -translate-x-1/2 rotate-90",
         className
       )}
@@ -215,7 +217,7 @@ function CarouselNext({
       className={cn(
         "absolute touch-manipulation",
         orientation === "horizontal"
-          ? "top-1/2 -right-12 -translate-y-1/2"
+          ? "inset-y-0 -right-12 my-auto"
           : "-bottom-12 left-1/2 -translate-x-1/2 rotate-90",
         className
       )}
