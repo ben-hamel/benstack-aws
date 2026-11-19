@@ -1,5 +1,5 @@
 import { auth } from "@benstack-aws/auth";
-import { db, eq } from "@benstack-aws/db";
+import { and, db, eq } from "@benstack-aws/db";
 import * as schema from "@benstack-aws/db/schema/auth";
 import { createMiddleware } from "hono/factory";
 import type { AppEnv } from "../types/hono";
@@ -27,21 +27,22 @@ export const orgMiddleware = createMiddleware<AppEnv>(async (c, next) => {
     return c.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let orgId = session.activeOrganizationId ?? null;
+  const activeOrgId = session.activeOrganizationId;
+  const isUserMember = eq(schema.member.userId, user.id);
+  const [membership] = await db
+    .select({ organizationId: schema.member.organizationId })
+    .from(schema.member)
+    .where(
+      activeOrgId == null
+        ? isUserMember
+        : and(isUserMember, eq(schema.member.organizationId, activeOrgId)),
+    )
+    .limit(1);
 
-  if (!orgId) {
-    const [membership] = await db
-      .select({ organizationId: schema.member.organizationId })
-      .from(schema.member)
-      .where(eq(schema.member.userId, user.id))
-      .limit(1);
-    orgId = membership?.organizationId ?? null;
-  }
-
-  if (!orgId) {
+  if (!membership) {
     return c.json({ error: "No active organization" }, { status: 403 });
   }
 
-  c.set("orgId", orgId);
+  c.set("orgId", membership.organizationId);
   await next();
 });
