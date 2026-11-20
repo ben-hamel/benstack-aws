@@ -37,48 +37,6 @@ resource "aws_iam_role_policy" "github_actions" {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid    = "ECR"
-        Effect = "Allow"
-        Action = [
-          "ecr:GetAuthorizationToken",
-          "ecr:BatchCheckLayerAvailability",
-          "ecr:InitiateLayerUpload",
-          "ecr:UploadLayerPart",
-          "ecr:CompleteLayerUpload",
-          "ecr:PutImage",
-          "ecr:BatchGetImage",
-          "ecr:GetDownloadUrlForLayer",
-          "ecr:DescribeImages"
-        ]
-        Resource = "*"
-      },
-      {
-        Sid    = "ECS"
-        Effect = "Allow"
-        Action = [
-          "ecs:DescribeTaskDefinition",
-          "ecs:RegisterTaskDefinition",
-          "ecs:UpdateService",
-          "ecs:DescribeServices",
-          "ecs:RunTask",
-          "ecs:DescribeTasks",
-          "ecs:StopTask"
-        ]
-        Resource = "*"
-      },
-      {
-        Sid      = "EC2Describe"
-        Effect   = "Allow"
-        Action   = ["ec2:DescribeSecurityGroups", "ec2:DescribeSubnets"]
-        Resource = "*"
-      },
-      {
-        Sid      = "PassRole"
-        Effect   = "Allow"
-        Action   = "iam:PassRole"
-        Resource = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/benstack-*"
-      },
-      {
         Sid    = "S3Frontend"
         Effect = "Allow"
         Action = [

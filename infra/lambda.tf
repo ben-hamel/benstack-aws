@@ -4,7 +4,8 @@ data "archive_file" "lambda_receipt_processor" {
   output_path = "${path.module}/../apps/receipt-processor/dist/function.zip"
 }
 
-# ── ECS receipt processor (always deployed, inside VPC, uses RDS) ─────────────
+# Legacy RDS receipt processor retained at its existing address for rollback.
+# Do not retire it or its networking before completing docs/lambda-cutover.md.
 
 resource "aws_cloudwatch_log_group" "lambda_receipt_processor" {
   name              = "/aws/lambda/benstack-receipt-processor"
@@ -40,7 +41,7 @@ resource "aws_lambda_function" "receipt_processor" {
   ]
 }
 
-# ── Serverless receipt processor (always deployed, outside VPC, uses Neon) ────
+# Active receipt processor (outside VPC, uses Neon).
 
 resource "aws_cloudwatch_log_group" "receipt_processor_serverless" {
   name              = "/aws/lambda/benstack-receipt-processor-serverless"
@@ -110,6 +111,6 @@ resource "aws_sqs_queue_policy" "receipt_processing" {
 
 resource "aws_lambda_event_source_mapping" "receipt_sqs" {
   event_source_arn = aws_sqs_queue.receipt_processing.arn
-  function_name    = var.api_mode == "serverless" ? aws_lambda_function.receipt_processor_serverless.arn : aws_lambda_function.receipt_processor.arn
+  function_name    = aws_lambda_function.receipt_processor_serverless.arn
   batch_size       = 1
 }

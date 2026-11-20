@@ -16,11 +16,8 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
-      host: env.DEV_SERVER_HOST || "127.0.0.1",
-      port: 3001,
-      allowedHosts: env.DEV_SERVER_ALLOWED_HOSTS
-        ? env.DEV_SERVER_ALLOWED_HOSTS.split(",").map((host) => host.trim())
-        : undefined,
+      port: env.DEV_PORT ? Number(env.DEV_PORT) : 3005,
+      strictPort: true,
     },
   };
 });

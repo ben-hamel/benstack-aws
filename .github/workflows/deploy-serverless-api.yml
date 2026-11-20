@@ -17,7 +17,6 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    if: vars.API_MODE == 'serverless'
 
     steps:
       - uses: actions/checkout@v6

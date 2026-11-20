@@ -9,31 +9,16 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as ReceiptsUploadRouteImport } from './routes/receipts-upload'
-import { Route as ReceiptsRouteImport } from './routes/receipts'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as DashboardRouteImport } from './routes/dashboard'
-import { Route as ChatRouteImport } from './routes/chat'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ChatRouteImport } from './routes/chat'
+import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as ReceiptsRouteImport } from './routes/receipts'
+import { Route as ReceiptsUploadRouteImport } from './routes/receipts-upload'
 
-const ReceiptsUploadRoute = ReceiptsUploadRouteImport.update({
-  id: '/receipts-upload',
-  path: '/receipts-upload',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ReceiptsRoute = ReceiptsRouteImport.update({
-  id: '/receipts',
-  path: '/receipts',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DashboardRoute = DashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ChatRoute = ChatRouteImport.update({
@@ -41,9 +26,24 @@ const ChatRoute = ChatRouteImport.update({
   path: '/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReceiptsRoute = ReceiptsRouteImport.update({
+  id: '/receipts',
+  path: '/receipts',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReceiptsUploadRoute = ReceiptsUploadRouteImport.update({
+  id: '/receipts-upload',
+  path: '/receipts-upload',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -75,12 +75,7 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    | '/'
-    | '/chat'
-    | '/dashboard'
-    | '/login'
-    | '/receipts'
-    | '/receipts-upload'
+    '/' | '/chat' | '/dashboard' | '/login' | '/receipts' | '/receipts-upload'
   fileRoutesByTo: FileRoutesByTo
   to: '/' | '/chat' | '/dashboard' | '/login' | '/receipts' | '/receipts-upload'
   id:
@@ -104,32 +99,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/receipts-upload': {
-      id: '/receipts-upload'
-      path: '/receipts-upload'
-      fullPath: '/receipts-upload'
-      preLoaderRoute: typeof ReceiptsUploadRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/receipts': {
-      id: '/receipts'
-      path: '/receipts'
-      fullPath: '/receipts'
-      preLoaderRoute: typeof ReceiptsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/dashboard': {
-      id: '/dashboard'
-      path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof DashboardRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/chat': {
@@ -139,11 +113,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/receipts': {
+      id: '/receipts'
+      path: '/receipts'
+      fullPath: '/receipts'
+      preLoaderRoute: typeof ReceiptsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/receipts-upload': {
+      id: '/receipts-upload'
+      path: '/receipts-upload'
+      fullPath: '/receipts-upload'
+      preLoaderRoute: typeof ReceiptsUploadRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
