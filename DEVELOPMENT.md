@@ -8,6 +8,10 @@ Pick whichever works best for you:
 - [Lima VM](docs/lima.md) — lightweight VM via Lima (macOS only)
 - [Dev Container](docs/dev-container.md) — Docker-based container with VS Code Dev Containers
 
+### Remote development with Rex
+
+Forward both ports to the machine running your browser: `3001` for Vite and `3000` for the API. Keep the browser-side port numbers the same and open `http://localhost:3001` so it matches `CORS_ORIGIN`. The web app calls `http://localhost:3000` through the API forward; no direct connection to the VM's IP is needed.
+
 ## Database Setup
 
 This project uses PostgreSQL with Drizzle ORM.
@@ -57,4 +61,3 @@ If you want to add app-specific blocks instead of shared primitives, run the sha
 - `bun run db:generate`: Generate database client/types
 - `bun run db:migrate`: Run database migrations
 - `bun run db:studio`: Open database studio UI
-- `bun run db:prod`: Connect to the production RDS database via ECS Exec (requires AWS CLI + Session Manager plugin)

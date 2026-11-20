@@ -1,4 +1,4 @@
-name: Deploy Lambda
+name: Deploy Receipt Processor Lambda
 
 on:
   workflow_dispatch:
@@ -43,15 +43,8 @@ jobs:
           zip function.zip index.js
 
           aws lambda update-function-code \
-            --function-name benstack-receipt-processor \
-            --zip-file fileb://function.zip
-
-          aws lambda update-function-code \
             --function-name benstack-receipt-processor-serverless \
             --zip-file fileb://function.zip
-
-          aws lambda wait function-updated \
-            --function-name benstack-receipt-processor
 
           aws lambda wait function-updated \
             --function-name benstack-receipt-processor-serverless

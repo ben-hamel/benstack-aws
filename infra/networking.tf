@@ -84,12 +84,11 @@ resource "aws_vpc_endpoint" "s3" {
   route_table_ids = [aws_route_table.public.id]
 }
 
-resource "aws_vpc_endpoint" "ssm" {
-  count               = var.api_mode != "serverless" ? 1 : 0
-  vpc_id              = aws_vpc.benstack.id
-  service_name        = "com.amazonaws.${var.aws_region}.ssm"
-  vpc_endpoint_type   = "Interface"
-  subnet_ids          = [local.public_subnet_ids[0]]
-  security_group_ids  = [aws_security_group.vpc_endpoints.id]
-  private_dns_enabled = true
+# May still serve both the legacy API and the RDS receipt processor.
+removed {
+  from = aws_vpc_endpoint.ssm
+
+  lifecycle {
+    destroy = false
+  }
 }
