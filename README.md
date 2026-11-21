@@ -4,9 +4,9 @@ A full-stack web app for tracking Costco purchases deployed on AWS. Use the [Cos
 
 ## Architecture
 
-The API runs on AWS Lambda behind API Gateway. The receipt processor runs on Lambda and consumes SQS messages from S3 uploads. Both use [Neon](https://neon.tech) Postgres. CloudFront serves the web app from S3.
+The API runs as a Lambda Web Function behind CloudFront. The receipt processor runs as a Lambda Event Function and consumes SQS messages from S3 uploads. Both use [Neon](https://neon.tech) Postgres. A separate CloudFront distribution serves the web app from S3.
 
-Before merging or applying the deployment cleanup, see the [production cutover and retention runbook](docs/lambda-cutover.md).
+See the [Web Function deployment runbook](docs/web-function-cutover.md) for API releases.
 
 ```mermaid
 flowchart LR
@@ -17,8 +17,8 @@ flowchart LR
         S3Frontend["🪣 S3 Frontend"]
         S3["🪣 S3 Receipts"]
         SQS["📨 SQS Queue"]
-        APIGateway["🔀 API Gateway\nHTTP API"]
-        LambdaAPI["λ Lambda\nbenstack-api"]
+        APICDN["🌐 CloudFront\nAPI"]
+        LambdaAPI["λ Lambda Web Function\nbenstack-api-web"]
         LambdaProcessor["λ Lambda\nreceipt-processor"]
         SSM["🔑 SSM\nParameter Store"]
     end
@@ -27,12 +27,12 @@ flowchart LR
 
     Client -->|"load app"| CloudFront
     CloudFront --> S3Frontend
-    Client -->|"① Request upload URL"| APIGateway
-    APIGateway --> LambdaAPI
+    Client -->|"① Request upload URL"| APICDN
+    APICDN --> LambdaAPI
     LambdaAPI -->|"Upload URL"| Client
     LambdaAPI <-->|"fetch config"| SSM
     Client -->|"② Upload file"| S3
-    Client -->|"⑤ Check progress"| APIGateway
+    Client -->|"⑤ Check progress"| APICDN
     LambdaAPI <-->|"Track job status"| Neon
     S3 -->|"③ File uploaded trigger"| SQS
     SQS -->|"④ Start processing"| LambdaProcessor
@@ -48,7 +48,7 @@ flowchart LR
     classDef client fill:none,stroke:#aaa,stroke-width:2px,color:#fff
     classDef cdn fill:none,stroke:#8C4FFF,stroke-width:2px,color:#fff
 
-    class APIGateway gateway
+    class APICDN cdn
     class LambdaAPI,LambdaProcessor lambda
     class S3,S3Frontend s3
     class SQS sqs
@@ -93,7 +93,7 @@ A planned conversational interface for querying your purchase history using an L
 ### Infrastructure
 
 - ![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white) - Containerisation
-- ![AWS](https://img.shields.io/badge/AWS-FF9900?style=flat-square&logo=amazonaws&logoColor=white) - API Gateway, Lambda, S3, SQS, CloudFront
+- ![AWS](https://img.shields.io/badge/AWS-FF9900?style=flat-square&logo=amazonaws&logoColor=white) - Lambda Web Functions, Lambda Event Functions, S3, SQS, CloudFront
 - ![Terraform](https://img.shields.io/badge/Terraform-7B42BC?style=flat-square&logo=terraform&logoColor=white) - Infrastructure as code for all AWS resources
 - ![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-2088FF?style=flat-square&logo=githubactions&logoColor=white) - CI/CD pipelines for automated deployments
 

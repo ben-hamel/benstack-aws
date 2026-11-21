@@ -25,16 +25,9 @@ resource "aws_route53_record" "api" {
   type    = "A"
 
   alias {
-    name                   = var.route_api_to_web_function && var.deploy_web_api ? aws_cloudfront_distribution.web_api[0].domain_name : module.hono_serverless_api[0].api_gateway_domain_name
-    zone_id                = var.route_api_to_web_function && var.deploy_web_api ? aws_cloudfront_distribution.web_api[0].hosted_zone_id : module.hono_serverless_api[0].api_gateway_hosted_zone_id
-    evaluate_target_health = !var.route_api_to_web_function
-  }
-
-  lifecycle {
-    precondition {
-      condition     = !var.route_api_to_web_function || var.deploy_web_api
-      error_message = "Set deploy_web_api=true before routing the API to the Web Function."
-    }
+    name                   = aws_cloudfront_distribution.web_api[0].domain_name
+    zone_id                = aws_cloudfront_distribution.web_api[0].hosted_zone_id
+    evaluate_target_health = false
   }
 
   depends_on = [aws_lambdaweb_resource_policy.web_api]

@@ -9,6 +9,9 @@ mock_provider "aws" {
   mock_resource "aws_iam_role" {
     defaults = { arn = "arn:aws:iam::123456789012:role/mock" }
   }
+  mock_resource "aws_cloudfront_distribution" {
+    defaults = { domain_name = "mock.cloudfront.net" }
+  }
   mock_data "aws_acm_certificate" {
     defaults = { arn = "arn:aws:acm:us-east-1:123456789012:certificate/00000000-0000-4000-8000-000000000002" }
   }
@@ -56,36 +59,15 @@ variables {
   cors_origin        = "https://app.aws.example.com"
 }
 
-run "keep_current_api_by_default" {
+run "route_api_to_web_function" {
   command = plan
 
   assert {
-    condition     = length(aws_lambdaweb_function.api) == 0 && aws_route53_record.api.alias[0].evaluate_target_health
-    error_message = "A default plan must keep API Gateway routing and not create a Web Function."
-  }
-}
-
-run "cutover_requires_deployment" {
-  command = plan
-
-  variables {
-    route_api_to_web_function = true
-  }
-
-  expect_failures = [aws_route53_record.api]
-}
-
-run "cutover_keeps_gateway_for_rollback" {
-  command = plan
-
-  variables {
-    deploy_web_api            = true
-    route_api_to_web_function = true
-  }
-
-  assert {
-    condition     = length(module.hono_serverless_api) == 1 && !aws_route53_record.api.alias[0].evaluate_target_health
-    error_message = "Cutover must keep the old API and use a CloudFront-compatible DNS alias."
+    condition = (
+      aws_route53_record.api.alias[0].name == aws_cloudfront_distribution.web_api[0].domain_name &&
+      !aws_route53_record.api.alias[0].evaluate_target_health
+    )
+    error_message = "The existing API hostname must use a CloudFront-compatible DNS alias."
   }
 
   assert {

@@ -22,12 +22,11 @@ removed {
 }
 
 module "hono_serverless_api" {
-  # Keep the existing production module address: module.hono_serverless_api[0].
+  # This module now retains only the API certificate and its DNS validation.
+  # Keep its existing state address to avoid replacing the certificate.
   count  = 1
   source = "./modules/hono-serverless-api"
 
-  aws_region     = var.aws_region
-  aws_account_id = data.aws_caller_identity.current.account_id
   api_domain     = var.api_domain
   hosted_zone_id = aws_route53_zone.aws.zone_id
 }

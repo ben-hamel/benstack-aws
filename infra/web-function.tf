@@ -1,17 +1,6 @@
-variable "deploy_web_api" {
-  description = "Deploy the Web Function and its CloudFront distribution in the existing account."
-  type        = bool
-  default     = false
-}
-
-variable "route_api_to_web_function" {
-  description = "Point the existing API hostname at the Web Function. Set false to roll back to API Gateway without deleting the Web Function."
-  type        = bool
-  default     = false
-}
-
 locals {
-  web_api_count    = var.deploy_web_api ? 1 : 0
+  # Keep the indexed state addresses used by the original cutover.
+  web_api_count    = 1
   web_api_name     = "benstack-api-web"
   web_api_log_name = "/aws/lambda/web/${local.web_api_name}"
   web_api_parameters = [
@@ -93,7 +82,7 @@ resource "aws_s3_object" "web_api" {
 }
 
 resource "aws_cloudwatch_log_group" "web_api" {
-  for_each          = var.deploy_web_api ? toset([local.web_api_log_name, "${local.web_api_log_name}.local"]) : toset([])
+  for_each          = toset([local.web_api_log_name, "${local.web_api_log_name}.local"])
   name              = each.value
   retention_in_days = 14
 }

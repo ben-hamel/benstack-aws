@@ -4,7 +4,6 @@
   "main": "src/index.ts",
   "scripts": {
     "build": "tsdown",
-    "build:lambda": "bun build src/lambda.ts --outfile dist/lambda/index.mjs --target node --bundle --format esm",
     "build:web-function": "bun --no-env-file scripts/build-web-function.ts",
     "dev:web-function": "bun --no-env-file scripts/build-web-function.ts && bun --no-env-file scripts/dev-web-function.ts",
     "test:web-function": "bun --no-env-file scripts/build-web-function.ts && bun --no-env-file test test/web-function.test.ts",

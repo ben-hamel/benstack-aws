@@ -1,30 +1,21 @@
-# Switch the Benstack API to Lambda Web Functions
+# Benstack API on Lambda Web Functions
 
-This uses the existing Terraform state and API hostname. No staging stack or CloudFormation template is needed. Terraform AWS provider 6.72 manages the Web Function resources; the provider uses AWS Cloud Control for some operations, so the deploy identity may still need Cloud Control IAM permissions. The SQS receipt processor and frontend distribution are unchanged.
+Terraform manages the Web Function, its versioned S3 bundle, and the CloudFront API distribution. CloudFront signs requests to the IAM-protected origin and does not cache API responses. The existing API hostname, certificate, frontend distribution, and SQS receipt-processing pipeline are retained. The old API module now manages only the certificate and its DNS validation records.
 
-## Prepare the plan
+## Release an API revision
 
-Use the existing environment's input variables and an authorized AWS profile. Check the account and region, and confirm that an issued ACM certificate for the API hostname exists in `us-east-1` for CloudFront. The Web Function uses the same seven `/benstack/` SSM parameters as the current API; no secret values need to be copied into Terraform or the bundle. If any SecureString uses a customer-managed KMS key, verify scoped decrypt permission before applying.
+Use the existing environment's Terraform variables and an authorized AWS profile. Confirm the account and region first. CloudFront needs an issued certificate for the API hostname in `us-east-1`. The Web Function reads the existing seven `/benstack/` SSM parameters at runtime; never put their values in the bundle. If a SecureString uses a customer-managed KMS key, grant the execution role scoped decrypt permission for that key.
 
 From the repository root:
 
 ```sh
 bun install --frozen-lockfile
-bun run --cwd apps/server build:web-function
-bun run --cwd apps/server build:lambda
+bun run --cwd apps/server test:web-function
 bun run --cwd apps/receipt-processor build
 terraform -chdir=infra init -lockfile=readonly
-terraform -chdir=infra plan -var='deploy_web_api=true' -var='route_api_to_web_function=true' -out=web-api.tfplan
+terraform -chdir=infra plan
 ```
 
-The last two builds are needed because the current stack still references the existing Lambda bundles. Review the full plan: expect the new Web Function, versioned artifact bucket, runtime role, logs, and CloudFront distribution, plus an update to the existing API DNS alias. Stop if the plan changes or replaces the existing Lambda code, receipt-processing pipeline, frontend, or any unrelated resource. Plan files can contain sensitive data; don't commit or share them.
+The Web Function test command builds its deployment bundle. The receipt processor build is required for a full plan because Terraform still references that bundle. Review the plan before applying: a Web Function release should publish a new revision and update its endpoint, not redeploy a receipt processor or change unrelated IAM rules. If a full plan includes unrelated drift, resolve it separately or scope the release plan to `-target=aws_lambdaweb_function_endpoint.api`. The old API Gateway deploy workflow is not used for Web Function releases.
 
-## Apply and verify
-
-After review, `terraform -chdir=infra apply web-api.tfplan` deploys the application and flips DNS in the same apply. The API is not cached, and CloudFront signs requests to the IAM-protected origin. Check `https://<api-hostname>/health` for JSON with `mode: application`, then sign in and load Receipts through the existing frontend. Check `/ready` after that first real API request. Also verify a chat stream and a receipt upload when appropriate.
-
-Persist both enabled variables in your local environment's Terraform inputs after the cutover so subsequent plans don't revert routing or destroy the new resources. The old API deployment workflow does not publish Web Function revisions; for now, rebuild the Web Function and use Terraform to release updates.
-
-## Roll back
-
-Plan and apply with `deploy_web_api=true` and `route_api_to_web_function=false` to restore the existing API Gateway alias without deleting the Web Function. Keep the legacy API and its certificate until the new route is verified and any retirement is handled separately.
+After applying, check `https://<api-hostname>/health` for JSON with `mode: application`, then sign in and load Receipts through the existing frontend. `/ready` returns `200` after the first real API request completes initialization. If needed, roll back by rebuilding the last known-good Web Function code and publishing it as a new revision. The old API Gateway is no longer the rollback path.
