@@ -5,7 +5,6 @@
 Pick whichever works best for you:
 
 - [Local](docs/local.md) — run directly on your host
-- [Lima VM](docs/lima.md) — lightweight VM via Lima (macOS only)
 - [Dev Container](docs/dev-container.md) — Docker-based container with VS Code Dev Containers
 
 ### Remote development with Rex

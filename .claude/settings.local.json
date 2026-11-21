@@ -17,8 +17,7 @@
       "WebFetch(domain:elements.ai-sdk.dev)",
       "WebFetch(domain:pi.dev)",
       "WebFetch(domain:www.anthropic.com)",
-      "WebFetch(domain:code.visualstudio.com)",
-      "WebFetch(domain:lima-vm.io)"
+      "WebFetch(domain:code.visualstudio.com)"
     ]
   }
 }
