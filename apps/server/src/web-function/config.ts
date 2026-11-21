@@ -27,9 +27,9 @@ const PARAMETER_KEYS = {
 } as const;
 
 export function parameterNames(prefix: string | undefined) {
-  // Never silently reuse the existing production /benstack/ namespace.
-  if (!prefix || !/^\/benstack-staging\/(?:[a-zA-Z0-9_-]+\/)*$/.test(prefix)) {
-    throw new Error("WEB_FUNCTION_SSM_PREFIX must be /benstack-staging/ or a child path ending in /");
+  // The live namespace must be selected explicitly; never fall back to it.
+  if (prefix !== "/benstack/" && (!prefix || !/^\/benstack-staging\/(?:[a-zA-Z0-9_-]+\/)*$/.test(prefix))) {
+    throw new Error("WEB_FUNCTION_SSM_PREFIX must be /benstack/ or under /benstack-staging/");
   }
   return Object.fromEntries(
     Object.entries(PARAMETER_KEYS).map(([key, suffix]) => [key, prefix + suffix]),

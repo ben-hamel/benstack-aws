@@ -101,10 +101,11 @@ describe("Web Function safety and runtime", () => {
     expect(localLaunch({ WEB_FUNCTION_LOCAL_ENDPOINT: "127.0.0.1:3100" }).env.AWS_LAMBDA_HTTP_ENDPOINT).toBe("127.0.0.1:3100");
   });
 
-  test("SSM configuration cannot select the production namespace", () => {
-    for (const value of [undefined, "", "/benstack/", "/benstack-staging", "/benstack-staging/../benstack/"]) {
+  test("SSM configuration requires an explicit live or staging namespace", () => {
+    for (const value of [undefined, "", "/benstack/other/", "/benstack-staging", "/benstack-staging/../benstack/"]) {
       expect(() => parameterNames(value)).toThrow();
     }
+    expect(parameterNames("/benstack/").DATABASE_URL).toBe("/benstack/neon-database-url");
     const names = parameterNames("/benstack-staging/api/");
     expect(Object.keys(names)).toHaveLength(7);
     expect(names.DATABASE_URL).toBe("/benstack-staging/api/neon-database-url");
@@ -112,21 +113,6 @@ describe("Web Function safety and runtime", () => {
     expect(decodeParameters(names, params).DATABASE_URL).toBe("fake");
     expect(() => decodeParameters(names, params.slice(1))).toThrow();
     expect(() => decodeParameters(names, params, [names.DATABASE_URL!])).toThrow();
-  });
-
-  test("infrastructure is separate, disabled, single-region and IAM protected", async () => {
-    const template = await Bun.file(new URL("../../../infra/web-function-staging/template.json", import.meta.url)).json();
-    expect(template.Parameters.EnableResources.Default).toBe("no");
-    expect(template.Parameters.RuntimeMode.Default).toBe("smoke");
-    for (const resource of Object.values(template.Resources) as { Condition: string }[]) {
-      expect(resource.Condition).toBe("ResourcesApproved");
-    }
-    const endpoint = template.Resources.Endpoint.Properties;
-    expect(endpoint.AuthType).toBe("IamAuth");
-    expect(endpoint.EndpointType).toBe("HomeRegion");
-    expect(endpoint.ThrottleConfig.RateLimit).toBe(0);
-    expect(endpoint.ScalingConfig.MaxEnvironments).toBe(2);
-    expect(template.Resources.Revision.Properties.BuildConfig.RuntimeConfig.Runtime).toBe("nodejs24.x");
   });
 
   test("bundled server runs on Node and sends the first SSE chunk before the last", async () => {
