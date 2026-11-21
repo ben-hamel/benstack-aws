@@ -7,7 +7,7 @@ tflint = "0.64.0"
 description = "Build Lambda deployment artifacts"
 run = [
   "bun run --cwd apps/receipt-processor build",
-  "bun run --cwd apps/server build:lambda",
+  "bun run --cwd apps/server build:web-function",
 ]
 
 [tasks."terraform:init"]

@@ -25,10 +25,12 @@ resource "aws_route53_record" "api" {
   type    = "A"
 
   alias {
-    name                   = module.hono_serverless_api[0].api_gateway_domain_name
-    zone_id                = module.hono_serverless_api[0].api_gateway_hosted_zone_id
-    evaluate_target_health = true
+    name                   = aws_cloudfront_distribution.web_api[0].domain_name
+    zone_id                = aws_cloudfront_distribution.web_api[0].hosted_zone_id
+    evaluate_target_health = false
   }
+
+  depends_on = [aws_lambdaweb_resource_policy.web_api]
 }
 
 resource "aws_route53_record" "frontend" {
