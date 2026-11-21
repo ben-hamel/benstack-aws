@@ -70,8 +70,7 @@ moderate finding.
 Passed:
 
 - `bun run check-types` (includes the frontend production build and UI/API type checks)
-- `bun run --cwd apps/server build:lambda`
-- `bun run build:lambda` (receipt processor)
+- API and receipt processor bundles at the time of the audit. For current API build and validation commands, see the [Web Function runbook](web-function-cutover.md).
 - `bun install --frozen-lockfile --ignore-scripts`
 - `git diff --check`
 - Offline chat Markdown/KaTeX rendering and inherited-trust regression checks
